@@ -1,0 +1,4 @@
+requests
+pyyaml
+# Solo para scripts/prepare.py (conversión local PNG -> JPG):
+pillow
