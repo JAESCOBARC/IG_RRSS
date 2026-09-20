@@ -137,8 +137,12 @@ cada uno, más estas reglas:
 
 1. **Contexto:** ejecuta `python scripts/upload_draft.py --recent` para ver los posts
    de las últimas semanas (título y URL). Necesita `IG_APP_URL` e `IG_APP_API_KEY`.
-2. **Uno por URL de `url.txt`** (3 URLs = 3 posts). Si `url.txt` cambia de tamaño,
-   reparte igualmente hasta llegar a 3, sin repetir URL dentro de la tanda si puedes.
+2. **3 URLs al azar de `url.txt`, distintas entre sí:** obtenlas con
+   `python scripts/pick_urls.py 3` (no las elijas tú: el script es el que sortea).
+   Un post por cada URL. Si una URL no está en `references/urls.md`, saca el dolor,
+   la keyword y el CTA real de la propia página (`WebFetch`) y aplica la fórmula
+   «[acción concreta] en trabajoenexcel.com». En la tanda semanal no modifiques
+   archivos del repo (no añadas esa URL a `urls.md`).
 3. **Ángulos distintos:** entre los 3 de la tanda y respecto a los recientes: no
    repitas el mismo dolor, gancho ni ejemplo de las últimas 3-4 semanas. Varía el
    objetivo (alcance / conexión / venta) entre los 3.

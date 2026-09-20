@@ -3,8 +3,10 @@
 Las URLs a promocionar están en `url.txt` (raíz del repo). Estos ángulos son
 una referencia ya verificada; el tema de cada carrusel se saca de la página
 real (`WebFetch` de la URL de `url.txt`) y, si algo difiere, manda la página.
-Si `url.txt` incluye una URL que no está aquí, extrae dolor/keyword/CTA con el
-mismo criterio y añádela a este archivo.
+Si `url.txt` incluye una URL que no está aquí (hay más URLs en `url.txt` que
+ángulos verificados en este archivo), extrae dolor/keyword/CTA de la página real con
+el mismo criterio y úsalos en el momento. Trabajando en local con el usuario, puedes
+ofrecerle añadirla a este archivo; en la rutina semanal no modifiques archivos.
 
 **RESTRICCIÓN (CTA):** nunca uses CTAs del tipo «Comenta X y te dejo/paso el
 link», «link en la bio/descripción» ni «escríbeme por DM». Todo CTA apunta a la
