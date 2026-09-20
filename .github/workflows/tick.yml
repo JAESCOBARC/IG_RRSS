@@ -1,0 +1,68 @@
+name: Programador de publicaciones
+
+# Avisa a la app cada 30 minutos. La app decide si toca publicar según app/schedule.txt
+# (un post por hueco, el más antiguo de la cola). GitHub Actions no despierta a su hora
+# exacta: puede tardar unos minutos.
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+    inputs:
+      forzar:
+        description: "PRUEBA: publicar YA el post más antiguo de la cola, sin esperar al hueco"
+        type: boolean
+        default: false
+
+permissions:
+  actions: write   # para reactivar este workflow y que GitHub no lo desactive por inactividad
+
+concurrency:
+  group: tick
+  cancel-in-progress: false
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Avisar a la app
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          APP_API_KEY: ${{ secrets.APP_API_KEY }}
+          FORZAR: ${{ inputs.forzar }}
+        run: |
+          set -euo pipefail
+          if [ -z "${APP_URL}" ] || [ -z "${APP_API_KEY}" ]; then
+            echo "::error::Faltan los secrets APP_URL y/o APP_API_KEY"
+            exit 1
+          fi
+          base="${APP_URL%/}"
+          url="${base}/api/cron/tick"
+          if [ "${FORZAR:-false}" = "true" ]; then url="${url}?force=1"; fi
+
+          # el plan gratuito de Render tarda ~1 min en despertar: se reintenta
+          resp=$(curl -fsS --retry 5 --retry-delay 20 --retry-all-errors --max-time 180 \
+                 -X POST -H "Authorization: Bearer ${APP_API_KEY}" "$url")
+          echo "$resp"
+          [ "$(echo "$resp" | jq -r '.action // empty')" = "publishing" ] || exit 0
+
+          # hay una publicación en curso: se espera al resultado para que un fallo avise por correo
+          id=$(echo "$resp" | jq -r '.post_id')
+          for _ in $(seq 1 60); do
+            sleep 10
+            st=$(curl -fsS --retry 3 --max-time 60 -H "Authorization: Bearer ${APP_API_KEY}" "${base}/api/posts/${id}")
+            status=$(echo "$st" | jq -r '.status')
+            echo "estado: ${status}"
+            case "$status" in
+              published) echo "Publicado: $(echo "$st" | jq -r '.permalink')"; exit 0 ;;
+              failed) echo "::error::La publicación falló: $(echo "$st" | jq -r '.error')"; exit 1 ;;
+            esac
+          done
+          echo "::error::La publicación no terminó en 10 minutos"
+          exit 1
+
+      - name: Mantener activo el programador
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api -X PUT "repos/${GITHUB_REPOSITORY}/actions/workflows/tick.yml/enable" || true

@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+{% block title %}{{ post.title }}{% endblock %}
+{% block head %}{% if refresh %}<meta http-equiv="refresh" content="4">{% endif %}{% endblock %}
+
+{% block content %}
+<p><a class="back" href="{{ url_for('index') }}">← Volver</a></p>
+
+<section class="head">
+  <h1>{{ post.title }}</h1>
+  <p class="muted">
+    <span class="pill {{ post.status }}">{{ STATUS[post.status] }}</span>
+    Creado {{ post.created_at | fmt }}
+    {% if post.source_url %} · <span class="url">{{ post.source_url }}</span>{% endif %}
+  </p>
+</section>
+
+{% if n_images %}
+<section aria-label="Slides del carrusel">
+  <div class="slides">
+    {% for i in range(n_images) %}
+    <figure>
+      <img src="{{ url_for('media', pid=post.id, n=i) }}" alt="Slide {{ i + 1 }} de {{ n_images }}" loading="lazy">
+      <figcaption>{{ i + 1 }} / {{ n_images }}</figcaption>
+    </figure>
+    {% endfor %}
+  </div>
+</section>
+{% elif post.status == 'published' %}
+<p class="notice">Las imágenes se borraron del servidor tras publicar.</p>
+{% elif post.status == 'rejected' %}
+<p class="notice">Post rechazado: las imágenes se borraron.</p>
+{% endif %}
+
+<section class="card">
+  <h2>Texto del post</h2>
+  <pre class="caption">{{ post.caption_full }}</pre>
+  <p class="muted small">{{ post.caption_full|length }} / 2200 caracteres · {{ post.hashtags|length }} hashtags</p>
+  {% if post.slides_text %}
+  <details>
+    <summary>Texto de los slides</summary>
+    <ol class="slide-text">
+      {% for t in post.slides_text %}<li>{{ t }}</li>{% endfor %}
+    </ol>
+  </details>
+  {% endif %}
+</section>
+
+{% if violations %}
+<section class="card danger">
+  <h2>No se puede publicar</h2>
+  <p>Este contenido incumple la restricción de CTA (no se permiten enlaces por comentarios, DM o bio):</p>
+  <ul>{% for v in violations %}<li>{{ v }}</li>{% endfor %}</ul>
+</section>
+{% endif %}
+
+{% if post.status == 'failed' %}
+<section class="card danger">
+  <h2>Error al publicar</h2>
+  <pre class="caption">{{ post.error }}</pre>
+  <p class="muted small">Antes de reintentar, comprueba en Instagram que el post no se haya publicado ya: un reintento podría duplicarlo.</p>
+</section>
+{% endif %}
+
+{% if post.status == 'published' %}
+<section class="card ok">
+  <h2>Publicado</h2>
+  <p>{{ post.published_at | fmt }}{% if post.permalink %} · <a href="{{ post.permalink }}" rel="noopener noreferrer">Ver en Instagram</a>{% endif %}</p>
+</section>
+{% endif %}
+
+{% if post.status == 'approved' %}
+<section class="card queued">
+  <h2>En cola</h2>
+  <p>
+    {% if queue.eta.get(post.id) %}Se publicará el <strong>{{ queue.eta.get(post.id) }}</strong> (hora de España).
+    {% else %}Se publicará en el próximo hueco libre.{% endif %}
+  </p>
+  <p class="muted small">Un solo post por hueco, por orden de aprobación. Huecos: {{ queue.schedule_text }}.</p>
+</section>
+{% endif %}
+
+{% if post.status == 'publishing' %}
+<section class="card">
+  <h2>Publicando en Instagram…</h2>
+  {% if is_stuck(post) %}
+  <p>Lleva demasiado tiempo. Puede haberse interrumpido; comprueba en Instagram si ya salió.</p>
+  <form method="post" action="{{ url_for('unstick', pid=post.id) }}">
+    <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+    <button class="btn" type="submit">Marcar como fallido</button>
+  </form>
+  {% else %}
+  <p class="muted">Esta página se actualiza sola.</p>
+  {% endif %}
+</section>
+{% endif %}
+
+{% if post.status == 'draft' %}
+<section class="card actions">
+  <form method="post" action="{{ url_for('approve', pid=post.id) }}">
+    <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+    <label class="check">
+      <input type="checkbox" name="confirm" required {% if violations %}disabled{% endif %}>
+      He revisado las imágenes y el texto. Autorizo su publicación en el próximo hueco libre.
+    </label>
+    <button class="btn primary" type="submit" {% if violations %}disabled{% endif %}>Aprobar y poner en cola</button>
+  </form>
+  <form method="post" action="{{ url_for('reject', pid=post.id) }}">
+    <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+    <button class="btn" type="submit">Rechazar y borrar imágenes</button>
+  </form>
+</section>
+{% elif post.status == 'approved' %}
+<section class="card actions">
+  <form method="post" action="{{ url_for('unqueue', pid=post.id) }}">
+    <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+    <button class="btn" type="submit">Sacar de la cola</button>
+  </form>
+  <form method="post" action="{{ url_for('reject', pid=post.id) }}">
+    <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+    <button class="btn" type="submit">Rechazar y borrar imágenes</button>
+  </form>
+</section>
+{% elif post.status == 'failed' %}
+<section class="card actions">
+  <form method="post" action="{{ url_for('reopen', pid=post.id) }}">
+    <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+    <button class="btn" type="submit">Volver a borrador</button>
+  </form>
+  <form method="post" action="{{ url_for('reject', pid=post.id) }}">
+    <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+    <button class="btn" type="submit">Rechazar y borrar imágenes</button>
+  </form>
+</section>
+{% endif %}
+
+{% if post.status in ('published', 'rejected', 'failed', 'draft') %}
+<form class="delete" method="post" action="{{ url_for('delete', pid=post.id) }}">
+  <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+  <button class="link danger-link" type="submit">Eliminar este registro</button>
+</form>
+{% endif %}
+{% endblock %}

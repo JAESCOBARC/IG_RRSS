@@ -2,4 +2,6 @@ __pycache__/
 *.pyc
 .venv/
 .env
-.claude/
+.claude/settings.local.json
+app/local.db
+app/*.db

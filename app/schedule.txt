@@ -1,0 +1,21 @@
+# Programación de publicaciones
+#
+# Cada línea "día HH:MM" es un hueco. En cada hueco se publica UN post: el más
+# antiguo de los aprobados (la cola). Si a esa hora no hay ninguno aprobado, el
+# hueco se pierde y no se recupera después.
+#
+# Días válidos: lunes martes miércoles jueves viernes sábado domingo
+# Las horas son de la zona indicada abajo (con cambio de hora verano/invierno automático).
+#
+# Para cambiar la programación: edita este archivo y súbelo a GitHub (git push);
+# Render se vuelve a desplegar solo. Un aviso del programador llega cada 30 minutos,
+# así que un post sale como mucho unos 30 min después de la hora indicada.
+
+zona: Europe/Madrid
+
+# Minutos de margen tras la hora del hueco durante los que aún se puede usar
+# (cubre retrasos del aviso de GitHub Actions).
+tolerancia_minutos: 120
+
+martes 15:30
+jueves 19:00
