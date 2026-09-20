@@ -33,8 +33,8 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "${APP_URL}" ] || [ -z "${APP_API_KEY}" ]; then
-            echo "::error::Faltan los secrets APP_URL y/o APP_API_KEY"
-            exit 1
+            echo "::warning::Programador sin configurar: faltan los secrets APP_URL y/o APP_API_KEY (ver app/README.md, paso 4)"
+            exit 0
           fi
           base="${APP_URL%/}"
           url="${base}/api/cron/tick"
