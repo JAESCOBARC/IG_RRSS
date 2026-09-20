@@ -1,3 +1,4 @@
+status: draft
 scheduled_date: 2026-09-20
 caption: |
   Tu equipo hace sprints. Pero no está haciendo Scrum.
@@ -15,5 +16,3 @@ hashtags:
   - productividad
   - trabajoenequipo
   - trabajoenexcel
-status: failed
-error: "API 400 en IGAA9xfSi7yJVBZAFp6a2VwZAFAwQzBzZAkU5X3pqd2JBbnVLdXRyZAVZAuV0hlTUhhVV9MN1o5LW02LUE4RDVHRXNGTWVuSElURVlXTWRGYW0xekVqZADhjT1pSTWVOakFYdkx2TWpYbWJJeF9UbXFSNGNyeFhNZAEZAfQXQxd0t5dlZAVTQZDZD/media: Invalid OAuth access token - Cannot parse access token"
