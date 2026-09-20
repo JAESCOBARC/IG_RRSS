@@ -12,7 +12,8 @@ se vea en el panel y se compruebe la restricción de CTA.
 
 Configuración (variables de entorno o fichero .env en la raíz, ignorado por git):
   IG_APP_URL      https://tu-app.onrender.com
-  IG_APP_API_KEY  la API_KEY de la app
+  IG_APP_API_KEY  la API_KEY de la app. Opcional en el entorno de nube de Claude, donde
+                  se guarda como «credencial de API» y el proxy la añade a la petición.
 
 Tras subirlo, las imágenes locales se borran (usa --keep para conservarlas).
 """
@@ -60,13 +61,18 @@ def main() -> int:
 
     load_env()
     base, key = os.environ.get("IG_APP_URL", "").rstrip("/"), os.environ.get("IG_APP_API_KEY", "")
-    if not base or not key:
-        print("Faltan IG_APP_URL / IG_APP_API_KEY (variables de entorno o .env).", file=sys.stderr)
+    if not base:
+        print("Falta IG_APP_URL (variable de entorno o .env).", file=sys.stderr)
         return 2
+    # Sin clave local no se envía cabecera: en la nube la añade el proxy del entorno.
+    headers = {"Authorization": f"Bearer {key}"} if key else {}
 
     if args.recent:
-        resp = requests.get(f"{base}/api/posts", headers={"Authorization": f"Bearer {key}"},
-                            params={"limit": 40}, timeout=120)
+        resp = requests.get(f"{base}/api/posts", headers=headers, params={"limit": 40}, timeout=120)
+        if resp.status_code == 401:
+            print("[FALLO] 401: la app no acepta la petición. Falta IG_APP_API_KEY (o la credencial "
+                  "de API del entorno de nube no está bien configurada).", file=sys.stderr)
+            return 1
         if resp.status_code != 200:
             print(f"[FALLO] {resp.status_code}: {resp.text[:200]}", file=sys.stderr)
             return 1
@@ -91,8 +97,7 @@ def main() -> int:
         "slides_text": json.dumps(slides_text(args.spec) if args.spec else [], ensure_ascii=False),
     }
     files = [("slides", (p.name, p.read_bytes(), "image/jpeg")) for p in images]
-    resp = requests.post(f"{base}/api/drafts", headers={"Authorization": f"Bearer {key}"},
-                         data=data, files=files, timeout=180)
+    resp = requests.post(f"{base}/api/drafts", headers=headers, data=data, files=files, timeout=180)
     try:
         body = resp.json()
     except ValueError:

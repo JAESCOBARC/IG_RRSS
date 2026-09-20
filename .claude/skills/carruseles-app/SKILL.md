@@ -118,7 +118,10 @@ python scripts/upload_draft.py <tmp>/post --spec <tmp>/spec.json
   servidor vuelve a comprobar la restricción de CTA y rechaza el borrador si la
   incumple: corrige el copy y vuelve a subirlo.
 - Necesita `IG_APP_URL` e `IG_APP_API_KEY` (variables de entorno o `.env` en la
-  raíz, ignorado por git). Si faltan, dilo al usuario; no las inventes.
+  raíz, ignorado por git). En la rutina de la nube solo existe `IG_APP_URL`: la
+  clave es una «credencial de API» del entorno que añade el proxy, así que el script
+  funciona sin ella. Si el servidor responde 401 o falta `IG_APP_URL`, dilo al usuario;
+  no inventes valores.
 - Tras subirlo, el script borra las imágenes locales y muestra el enlace del
   borrador. **Dáselo al usuario y termina ahí**: la aprobación la hace él en el
   panel y la publicación sale sola en el siguiente hueco de `app/schedule.txt`
@@ -136,7 +139,7 @@ rutina programada de los lunes, genera **3 carruseles** siguiendo el flujo 1-7 p
 cada uno, más estas reglas:
 
 1. **Contexto:** ejecuta `python scripts/upload_draft.py --recent` para ver los posts
-   de las últimas semanas (título y URL). Necesita `IG_APP_URL` e `IG_APP_API_KEY`.
+   de las últimas semanas (título y URL). Necesita `IG_APP_URL` (y la clave, ver paso 7).
 2. **3 URLs al azar de `url.txt`, distintas entre sí:** obtenlas con
    `python scripts/pick_urls.py 3` (no las elijas tú: el script es el que sortea).
    Un post por cada URL. Si una URL no está en `references/urls.md`, saca el dolor,

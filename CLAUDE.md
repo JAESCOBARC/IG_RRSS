@@ -47,7 +47,9 @@ termina subiendo el borrador y dándole al usuario el enlace del panel.
   local tras subir el borrador. Generar siempre en el directorio temporal.
 - **El repo es público: nunca** escribir tokens, API keys, contraseñas ni ficheros
   con secretos dentro de la carpeta. Los secretos viven en las variables de
-  entorno de Render y en `.env` local (ignorado por git), y no se pegan en el chat.
+  entorno de Render, en `.env` local (ignorado por git) y, para la rutina de la nube, en
+  las «credenciales de API» de su entorno (no como variable de entorno: esas las ve
+  cualquiera que use el entorno). No se pegan en el chat.
 - Máximo 2200 caracteres de caption y 30 hashtags (la skill usa 3-6).
 - Commits: mensaje corto en inglés, como los existentes.
 
