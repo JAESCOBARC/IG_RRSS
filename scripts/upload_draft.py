@@ -6,7 +6,8 @@ Uso:
   python scripts/upload_draft.py --recent      # lista los posts recientes (para no repetir temas)
 
 CARPETA contiene slide-01.jpg, slide-02.jpg... y meta.yaml con:
-  title, caption, hashtags (lista sin #) y, opcional, source_url.
+  kind (carrusel | publicacion | historia; por defecto carrusel), title, caption,
+  hashtags (lista sin #) y, opcional, source_url. Una historia no lleva caption ni hashtags.
 --spec es el JSON con el que se generaron las slides; su texto se sube para que
 se vea en el panel y se compruebe la restricción de CTA.
 
@@ -77,7 +78,8 @@ def main() -> int:
             print(f"[FALLO] {resp.status_code}: {resp.text[:200]}", file=sys.stderr)
             return 1
         for post in resp.json():
-            print(f"{post['created_at'][:10]}  {post['status']:<10}  {post['title']}  |  {post.get('source_url') or ''}")
+            print(f"{post['created_at'][:10]}  {post['status']:<10}  {post.get('kind', 'carrusel'):<11}  "
+                  f"{post['title']}  |  {post.get('source_url') or ''}")
         return 0
     if not args.folder:
         parser.error("indica CARPETA o usa --recent")
@@ -90,6 +92,7 @@ def main() -> int:
     meta = yaml.safe_load(meta_path.read_text(encoding="utf-8")) or {}
 
     data = {
+        "kind": meta.get("kind", "carrusel"),
         "title": meta.get("title", ""),
         "caption": meta.get("caption", ""),
         "hashtags": json.dumps(meta.get("hashtags") or [], ensure_ascii=False),

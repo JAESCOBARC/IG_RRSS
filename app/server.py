@@ -26,14 +26,24 @@ import db
 import guards
 import instagram
 import schedule
+from schedule import KINDS
 
 DEV = os.environ.get("APP_ENV") == "dev"
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
 API_KEY = os.environ.get("API_KEY", "")
 MAX_CAPTION = 2200
-MAX_HASHTAGS = 30
 MAX_SLIDES = 10
+MAX_HASHTAGS = 30
 MAX_IMAGE_BYTES = 8 * 1024 * 1024  # límite de Instagram por imagen
+RATIO_TOL = 0.005
+FEED_RATIO = (0.8, 1.91)      # ancho/alto admitido en el feed (4:5 a 1,91:1)
+STORY_RATIO = (0.5, 0.6)      # historias: 9:16 (0,5625)
+# reglas por tipo: nº de imágenes (mín, máx), rango de proporción y si lleva texto de publicación
+KIND_RULES = {
+    "carrusel": {"count": (2, MAX_SLIDES), "ratio": FEED_RATIO, "caption": True},
+    "publicacion": {"count": (1, 1), "ratio": FEED_RATIO, "caption": True},
+    "historia": {"count": (1, 1), "ratio": STORY_RATIO, "caption": False},
+}
 TOKEN_REFRESH_DAYS = 20
 STUCK_MINUTES = 10
 TICK_STALE_HOURS = 2  # sin avisos del programador durante más de esto -> se avisa en el panel
@@ -135,8 +145,29 @@ def build_caption(caption: str, hashtags: list[str]) -> str:
 def post_view(row: dict) -> dict:
     row["hashtags"] = json.loads(row["hashtags"])
     row["slides_text"] = json.loads(row["slides_text"])
-    row["caption_full"] = build_caption(row["caption"], row["hashtags"])
+    # las historias no llevan texto de publicación
+    row["caption_full"] = "" if row.get("kind") == "historia" else build_caption(row["caption"], row["hashtags"])
     return row
+
+
+def jpeg_size(data: bytes):
+    """(ancho, alto) de un JPEG leyendo su cabecera, o None si no se puede."""
+    i = 2
+    while i + 9 < len(data):
+        if data[i] != 0xFF:
+            i += 1
+            continue
+        marker = data[i + 1]
+        if marker == 0xFF:
+            i += 1
+            continue
+        if marker in (0x01, 0xD8) or 0xD0 <= marker <= 0xD7:
+            i += 2
+            continue
+        if marker in (0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7, 0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF):
+            return int.from_bytes(data[i + 7:i + 9], "big"), int.from_bytes(data[i + 5:i + 7], "big")
+        i += 2 + int.from_bytes(data[i + 2:i + 4], "big")
+    return None
 
 
 def is_stuck(post: dict) -> bool:
@@ -147,6 +178,7 @@ def is_stuck(post: dict) -> bool:
 
 
 app.jinja_env.globals["is_stuck"] = is_stuck
+app.jinja_env.globals["KIND"] = {"carrusel": "Carrusel", "publicacion": "Publicación", "historia": "Historia"}
 app.jinja_env.globals["STATUS"] = {
     "draft": "Por aprobar", "approved": "En cola", "publishing": "Publicando…",
     "failed": "Falló", "published": "Publicado", "rejected": "Rechazado",
@@ -237,17 +269,24 @@ def logout():
 
 def _queue_context(conn) -> dict:
     """Programación, hora prevista de cada post aprobado y salud del programador."""
-    approved = db.query(conn, "SELECT id FROM posts WHERE status = 'approved' ORDER BY approved_at ASC")
-    last_slot = db.kv_get(conn, "last_slot")
+    approved = db.query(conn, "SELECT id, kind FROM posts WHERE status = 'approved' ORDER BY approved_at ASC")
     last_tick = db.kv_get(conn, "last_tick_at")
-    ctx = {"eta": {}, "schedule_text": "", "schedule_error": None, "last_tick": last_tick,
+    ctx = {"eta": {}, "schedule_text": "", "schedule_error": None, "last_tick": last_tick, "no_slot": [],
            "tick_stale": (not last_tick) or utcnow() - dt.datetime.fromisoformat(last_tick)
            > dt.timedelta(hours=TICK_STALE_HOURS)}
     try:
         cfg = schedule.load()
-        used = dt.datetime.fromisoformat(last_slot) if last_slot else None
-        for row, slot in zip(approved, cfg.upcoming(utcnow(), used, len(approved))):
-            ctx["eta"][row["id"]] = cfg.label(slot)
+        for kind in KINDS:
+            ids = [r["id"] for r in approved if r["kind"] == kind]
+            if not ids:
+                continue
+            if kind not in cfg.kinds():
+                ctx["no_slot"].append(kind)
+                continue
+            last = db.kv_get(conn, f"last_slot:{kind}")
+            used = dt.datetime.fromisoformat(last) if last else None
+            for pid, slot in zip(ids, cfg.upcoming(utcnow(), used, len(ids), kind)):
+                ctx["eta"][pid] = cfg.label(slot)
         ctx["schedule_text"] = f"{cfg.describe()} · hora de {cfg.tz_name}"
     except schedule.ScheduleError as exc:
         ctx["schedule_error"] = str(exc)
@@ -259,7 +298,7 @@ def _queue_context(conn) -> dict:
 def index():
     with db.connect() as conn:
         rows = db.query(conn, (
-            "SELECT p.id, p.title, p.status, p.created_at, p.approved_at, p.published_at, p.permalink, p.updated_at, "
+            "SELECT p.id, p.title, p.status, p.kind, p.created_at, p.approved_at, p.published_at, p.permalink, p.updated_at, "
             "(SELECT COUNT(*) FROM images i WHERE i.post_id = p.id) AS n_images "
             "FROM posts p ORDER BY p.created_at DESC LIMIT 100"))
         refreshed = db.kv_get(conn, "ig_token_refreshed_at")
@@ -354,48 +393,77 @@ def unqueue(pid):
     return redirect(url_for("post_page", pid=pid))
 
 
-def _start_publish(pid: str, base_url: str) -> None:
-    threading.Thread(target=_publish_worker, args=(pid, base_url), daemon=False).start()
+def _start_publish(pids: list[str], base_url: str) -> None:
+    """Publica en orden, en un solo hilo, los posts indicados."""
+    def run():
+        for pid in pids:
+            _publish_worker(pid, base_url)
+    threading.Thread(target=run, daemon=False).start()
 
 
-def _claim_slot(conn, slot_iso: str) -> bool:
-    """Marca el hueco como usado. Atómico: solo un aviso del programador lo consigue."""
-    db.execute(conn, ("INSERT INTO kv (key, value, updated_at) VALUES ('last_slot', '', %s) "
-                      "ON CONFLICT (key) DO NOTHING"), (db.now(),))
+def _claim_slot(conn, kind: str, slot_iso: str) -> bool:
+    """Marca el hueco de ese tipo como usado. Atómico: solo un aviso del programador lo consigue."""
+    key = f"last_slot:{kind}"
+    db.execute(conn, ("INSERT INTO kv (key, value, updated_at) VALUES (%s, '', %s) "
+                      "ON CONFLICT (key) DO NOTHING"), (key, db.now()))
     return bool(db.query(conn, (
-        "UPDATE kv SET value = %s, updated_at = %s WHERE key = 'last_slot' AND value < %s RETURNING key"),
-        (slot_iso, db.now(), slot_iso)))
+        "UPDATE kv SET value = %s, updated_at = %s WHERE key = %s AND value < %s RETURNING key"),
+        (slot_iso, db.now(), key, slot_iso)))
+
+
+def _take_oldest(conn, kind):
+    """Pasa a «publicando» el post aprobado más antiguo (del tipo dado, o de cualquiera)."""
+    where, params = ("AND kind = %s ", (kind,)) if kind else ("", ())
+    rows = db.query(conn, (
+        "UPDATE posts SET status = 'publishing', updated_at = %s, error = NULL "
+        f"WHERE id = (SELECT id FROM posts WHERE status = 'approved' {where}ORDER BY approved_at ASC LIMIT 1) "
+        "AND status = 'approved' RETURNING id, kind"), (db.now(), *params))
+    return rows[0] if rows else None
 
 
 @app.post("/api/cron/tick")
 @api_key_required
 def api_tick():
-    """Aviso del programador (GitHub Actions, cada ~30 min). Si hay un hueco de schedule.txt
-    vigente y sin usar, publica el post más antiguo de la cola (o deja el hueco vacío).
-    `?force=1` publica ya el más antiguo sin gastar hueco: solo para pruebas manuales."""
+    """Aviso del programador (GitHub Actions, cada ~30 min). Por cada tipo con un hueco de
+    schedule.txt vigente y sin usar, publica el post más antiguo de la cola de ese tipo (o deja
+    el hueco vacío). `?force=1[&kind=historia]` publica ya el más antiguo, sin gastar hueco:
+    solo para pruebas manuales."""
     force = request.args.get("force") == "1"
-    slot_iso = None
+    only_kind = request.args.get("kind") or None
+    if only_kind and only_kind not in KINDS:
+        return _bad(f"kind debe ser uno de: {', '.join(KINDS)}", 400)
+    targets: list[tuple[str | None, str | None]] = []  # (tipo, hueco)
+    used_slots: list[str] = []
     with db.connect() as conn:
         db.kv_set(conn, "last_tick_at", utcnow().isoformat(timespec="seconds"))
-        if not force:
+        if force:
+            targets = [(only_kind, None)]
+        else:
             try:
-                slot = schedule.load().due_slot(utcnow())
+                due = schedule.load().due_slots(utcnow())
             except schedule.ScheduleError as exc:
                 return jsonify(error=str(exc)), 500
-            if slot is None:
+            if not due:
                 return jsonify(action="idle")
-            slot_iso = slot.astimezone(dt.timezone.utc).isoformat(timespec="seconds")
-            if not _claim_slot(conn, slot_iso):
-                return jsonify(action="slot-used", slot=slot_iso)
-        rows = db.query(conn, (
-            "UPDATE posts SET status = 'publishing', updated_at = %s, error = NULL "
-            "WHERE id = (SELECT id FROM posts WHERE status = 'approved' ORDER BY approved_at ASC LIMIT 1) "
-            "AND status = 'approved' RETURNING id"), (db.now(),))
-    if not rows:
-        return jsonify(action="empty-queue", slot=slot_iso)
+            for kind, slot in due.items():
+                slot_iso = slot.astimezone(dt.timezone.utc).isoformat(timespec="seconds")
+                if _claim_slot(conn, kind, slot_iso):
+                    targets.append((kind, slot_iso))
+                else:
+                    used_slots.append(f"{kind}@{slot_iso}")
+            if not targets:
+                return jsonify(action="slot-used", slots=used_slots)
+        picked = []
+        for kind, slot_iso in targets:
+            row = _take_oldest(conn, kind)
+            if row:
+                picked.append({"post_id": row["id"], "kind": row["kind"], "slot": slot_iso})
+    if not picked:
+        return jsonify(action="empty-queue", slots=[t[1] for t in targets])
     base = os.environ.get("PUBLIC_BASE_URL", "").rstrip("/") or request.url_root.rstrip("/")
-    _start_publish(rows[0]["id"], base)
-    return jsonify(action="publishing", post_id=rows[0]["id"], slot=slot_iso)
+    _start_publish([p["post_id"] for p in picked], base)
+    return jsonify(action="publishing", post_id=picked[0]["post_id"],
+                   post_ids=[p["post_id"] for p in picked], posts=picked)
 
 
 def _publish_worker(pid: str, base_url: str) -> None:
@@ -413,7 +481,7 @@ def _publish_worker(pid: str, base_url: str) -> None:
         user_id = os.environ.get("IG_USER_ID", "")
         hidden = [token, user_id]
         urls = [f"{base_url}/media/{pid}/{i}.jpg" for i in range(n)]
-        result = instagram.publish(urls, post["caption_full"], user_id, token)
+        result = instagram.publish(urls, post["caption_full"], user_id, token, kind=post["kind"])
     except Exception as exc:  # noqa: BLE001 - cualquier fallo deja el post en "failed"
         with db.connect() as conn:
             _set_status(conn, pid, ("publishing",), "failed", redact(str(exc), hidden)[:500])
@@ -486,6 +554,10 @@ def api_create_draft():
     title = (request.form.get("title") or "").strip()
     caption = (request.form.get("caption") or "").strip()
     source_url = (request.form.get("source_url") or "").strip()[:300]
+    kind = (request.form.get("kind") or "carrusel").strip()
+    if kind not in KIND_RULES:
+        return _bad(f"kind debe ser uno de: {', '.join(KINDS)}")
+    rules = KIND_RULES[kind]
     try:
         hashtags = json.loads(request.form.get("hashtags") or "[]")
         slides_text = json.loads(request.form.get("slides_text") or "[]")
@@ -495,8 +567,10 @@ def api_create_draft():
         return _bad("hashtags y slides_text deben ser listas")
     if not title or len(title) > 120:
         return _bad("title es obligatorio (máx. 120 caracteres)")
-    if not caption:
+    if rules["caption"] and not caption:
         return _bad("caption es obligatorio")
+    if not rules["caption"]:
+        caption, hashtags = "", []  # las historias no llevan texto de publicación
 
     tags = []
     for h in hashtags:
@@ -507,13 +581,15 @@ def api_create_draft():
             tags.append(h)
     if len(tags) > MAX_HASHTAGS:
         return _bad(f"demasiados hashtags ({len(tags)}); el máximo es {MAX_HASHTAGS}")
-    full = build_caption(caption, tags)
+    full = "" if kind == "historia" else build_caption(caption, tags)
     if len(full) > MAX_CAPTION:
         return _bad(f"caption demasiado largo ({len(full)} > {MAX_CAPTION})")
 
     files = request.files.getlist("slides")
-    if not 1 <= len(files) <= MAX_SLIDES:
-        return _bad(f"hay que subir entre 1 y {MAX_SLIDES} imágenes")
+    lo, hi = rules["count"]
+    if not lo <= len(files) <= hi:
+        return _bad(f"un {kind} lleva " + (f"{lo} imagen" if lo == hi == 1 else f"entre {lo} y {hi} imágenes")
+                    + f" (recibidas: {len(files)})")
     images = []
     for f in files:
         data = f.read()
@@ -521,6 +597,13 @@ def api_create_draft():
             return _bad(f"{f.filename}: no es un JPEG (Instagram solo acepta JPEG)")
         if len(data) > MAX_IMAGE_BYTES:
             return _bad(f"{f.filename}: supera los 8 MB de Instagram")
+        size = jpeg_size(data)
+        if not size:
+            return _bad(f"{f.filename}: no se pudo leer el tamaño de la imagen")
+        ratio, (rmin, rmax) = size[0] / size[1], rules["ratio"]
+        if not rmin - RATIO_TOL <= ratio <= rmax + RATIO_TOL:
+            expected = "9:16 (1080x1920)" if kind == "historia" else "entre 4:5 y 1,91:1 (por ejemplo 1080x1350)"
+            return _bad(f"{f.filename}: proporción {size[0]}x{size[1]} no válida para {kind}; debe ser {expected}")
         images.append(data)
 
     violations = guards.check(full, *[str(t) for t in slides_text])
@@ -531,9 +614,9 @@ def api_create_draft():
     stamp = db.now()
     with db.connect() as conn:
         db.execute(conn, (
-            "INSERT INTO posts (id, title, status, caption, hashtags, slides_text, source_url, created_at, updated_at) "
-            "VALUES (%s, %s, 'draft', %s, %s, %s, %s, %s, %s)"),
-            (pid, title, caption, json.dumps(tags, ensure_ascii=False),
+            "INSERT INTO posts (id, title, status, kind, caption, hashtags, slides_text, source_url, created_at, updated_at) "
+            "VALUES (%s, %s, 'draft', %s, %s, %s, %s, %s, %s, %s)"),
+            (pid, title, kind, caption, json.dumps(tags, ensure_ascii=False),
              json.dumps([str(t) for t in slides_text], ensure_ascii=False), source_url or None, stamp, stamp))
         try:
             for i, data in enumerate(images):
@@ -554,7 +637,7 @@ def api_list_posts():
         return _bad("limit debe ser un número", 400)
     with db.connect() as conn:
         rows = db.query(conn, (
-            "SELECT id, title, status, source_url, created_at, published_at FROM posts "
+            "SELECT id, title, status, kind, source_url, created_at, published_at FROM posts "
             "ORDER BY created_at DESC LIMIT %s"), (limit,))
     return jsonify(rows)
 
@@ -563,7 +646,7 @@ def api_list_posts():
 @api_key_required
 def api_post_status(pid):
     with db.connect() as conn:
-        row = db.one(conn, "SELECT id, status, permalink, error, approved_at, published_at FROM posts WHERE id = %s", (pid,))
+        row = db.one(conn, "SELECT id, status, kind, permalink, error, approved_at, published_at FROM posts WHERE id = %s", (pid,))
     return (jsonify(row), 200) if row else (jsonify(error="no existe"), 404)
 
 

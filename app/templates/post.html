@@ -8,6 +8,7 @@
 <section class="head">
   <h1>{{ post.title }}</h1>
   <p class="muted">
+    <span class="pill kind">{{ KIND[post.kind] }}</span>
     <span class="pill {{ post.status }}">{{ STATUS[post.status] }}</span>
     Creado {{ post.created_at | fmt }}
     {% if post.source_url %} · <span class="url">{{ post.source_url }}</span>{% endif %}
@@ -16,7 +17,7 @@
 
 {% if n_images %}
 <section aria-label="Slides del carrusel">
-  <div class="slides">
+  <div class="slides kind-{{ post.kind }}">
     {% for i in range(n_images) %}
     <figure>
       <img src="{{ url_for('media', pid=post.id, n=i) }}" alt="Slide {{ i + 1 }} de {{ n_images }}" loading="lazy">
@@ -32,9 +33,14 @@
 {% endif %}
 
 <section class="card">
+  {% if post.kind == 'historia' %}
+  <h2>Historia</h2>
+  <p class="muted">Las historias no llevan texto de publicación: todo el mensaje va dentro de la imagen. Se ven 24 horas.</p>
+  {% else %}
   <h2>Texto del post</h2>
   <pre class="caption">{{ post.caption_full }}</pre>
   <p class="muted small">{{ post.caption_full|length }} / 2200 caracteres · {{ post.hashtags|length }} hashtags</p>
+  {% endif %}
   {% if post.slides_text %}
   <details>
     <summary>Texto de los slides</summary>

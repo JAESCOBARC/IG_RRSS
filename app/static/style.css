@@ -117,3 +117,11 @@ summary { cursor: pointer; font-weight: 600; }
 .delete { margin-top: 28px; text-align: center; }
 .danger-link { color: var(--danger); font-size: .9rem; }
 .foot { text-align: center; margin-top: 36px; font-size: .85rem; }
+
+/* tipos de post */
+.pill.kind { background: #E4EAF0; color: #2C4A63; }
+.tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.post-card.k-historia img, .post-card.k-historia .noimg { aspect-ratio: 9 / 16; }
+.slides.kind-historia figure { flex: 0 0 min(56vw, 240px); }
+.slides.kind-historia img { aspect-ratio: 9 / 16; }
+.slides.kind-publicacion figure { flex: 0 0 min(86vw, 360px); }

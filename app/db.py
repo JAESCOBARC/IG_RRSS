@@ -19,6 +19,7 @@ SCHEMA = [
         id TEXT PRIMARY KEY,
         title TEXT NOT NULL,
         status TEXT NOT NULL,
+        kind TEXT NOT NULL DEFAULT 'carrusel',
         caption TEXT NOT NULL,
         hashtags TEXT NOT NULL,
         slides_text TEXT NOT NULL,
@@ -90,10 +91,21 @@ def execute(conn, sql, params=()) -> int:
     return _run(conn, sql, params).rowcount
 
 
+def _has_column(conn, table: str, column: str) -> bool:
+    if IS_PG:
+        return bool(query(conn, (
+            "SELECT 1 FROM information_schema.columns "
+            "WHERE table_schema = current_schema() AND table_name = %s AND column_name = %s"), (table, column)))
+    return any(r["name"] == column for r in query(conn, f"PRAGMA table_info({table})"))
+
+
 def init_db():
     with connect() as conn:
         for stmt in SCHEMA:
             execute(conn, stmt)
+        # migraciones: bases de datos creadas antes de que existiera el tipo de post
+        if not _has_column(conn, "posts", "kind"):
+            execute(conn, "ALTER TABLE posts ADD COLUMN kind TEXT NOT NULL DEFAULT 'carrusel'")
 
 
 def kv_get(conn, key):

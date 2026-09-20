@@ -1,7 +1,8 @@
 # App de aprobación
 
-Panel web para revisar los carruseles generados, autorizarlos y publicarlos en
-Instagram **en los huecos que definas** (`schedule.txt`). Al publicar, la app **borra
+Panel web para revisar el contenido generado (**carruseles, publicaciones de una imagen e
+historias**), autorizarlo y publicarlo en Instagram **en los huecos que definas**
+(`schedule.txt`). Al publicar, la app **borra
 los JPG**; solo conserva el texto, el estado y el enlace del post.
 
 ```
@@ -16,11 +17,15 @@ GitHub Actions (cada 30 min) ──▶ /api/cron/tick ──▶ ¿hueco de sched
 ```
 zona: Europe/Madrid
 tolerancia_minutos: 120
-martes 15:30
-jueves 19:00
+martes 15:30 carrusel
+jueves 19:00 publicacion
+jueves 19:00 historia
 ```
-- Un post por hueco: el **más antiguo de la cola** (orden de aprobación).
-- Si a esa hora no hay ninguno aprobado, el hueco **se pierde**: aprueba antes de la hora.
+- Cada hueco es **«día hora tipo»** con tipo `carrusel`, `publicacion` o `historia`. Dos huecos a la
+  misma hora con tipos distintos salen juntos.
+- Un post por hueco: el **más antiguo de la cola de ese tipo** (orden de aprobación).
+- Si a esa hora no hay ninguno aprobado de ese tipo, el hueco **se pierde**: aprueba antes de la hora.
+- Un tipo sin ningún hueco en el archivo no se publica nunca; el panel lo avisa.
 - Horas de España peninsular, con cambio verano/invierno automático.
 - Para cambiarla: edita `app/schedule.txt`, `git push` y Render se redespliega solo.
 - El aviso de GitHub llega cada 30 min y puede retrasarse unos minutos: un post sale
@@ -77,12 +82,21 @@ El workflow **Programador de publicaciones** empezará a avisar cada 30 min.
 4. **Programador sin publicar:** GitHub → Actions → *Programador de publicaciones* →
    **Run workflow** (sin marcar «forzar»). Fuera de un hueco responde `idle` y no publica.
    En el panel, el pie muestra «Último aviso del programador».
-5. **Publicación real (una vez):** repite *Run workflow* marcando **forzar**. Publica YA el
-   post más antiguo de la cola en @trabajoenexcel: usa un post que quieras publicar de
-   verdad. El workflow espera al resultado y falla (con correo de GitHub) si algo va mal.
+5. **Publicación real (una vez por tipo):** repite *Run workflow* marcando **forzar** y, si
+   quieres, eligiendo el **tipo**. Publica YA el post aprobado más antiguo de ese tipo (o de
+   cualquiera) en @trabajoenexcel: usa uno que quieras publicar de verdad. Prueba el carrusel, la
+   publicación y la historia por separado. El workflow espera al resultado y falla (con correo de GitHub) si algo va mal.
 6. **Verificar:** el post pasa a «Publicado» con el enlace a Instagram, y su página indica
    «Las imágenes se borraron del servidor tras publicar».
 7. **Programación normal:** a partir de ahí, lo aprobado sale solo en cada hueco.
+
+**Tipos y reglas de imagen** (la app las valida al subir):
+
+| Tipo | Imágenes | Proporción | Texto de publicación |
+|---|---|---|---|
+| Carrusel | 2-10 | 4:5 a 1,91:1 (p. ej. 1080x1350) | caption + hashtags |
+| Publicación | 1 | 4:5 a 1,91:1 (p. ej. 1080x1350) | caption + hashtags |
+| Historia | 1 | 9:16 (1080x1920) | ninguno (la API no lo admite) |
 
 Estados: **Por aprobar**, **En cola**, **Publicando**, **Publicado**, **Falló** (con el error;
 comprueba en Instagram que no se publicó antes de reabrirlo) y **Rechazado**.

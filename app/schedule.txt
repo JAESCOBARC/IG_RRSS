@@ -1,10 +1,14 @@
 # Programación de publicaciones
 #
-# Cada línea "día HH:MM" es un hueco. En cada hueco se publica UN post: el más
-# antiguo de los aprobados (la cola). Si a esa hora no hay ninguno aprobado, el
-# hueco se pierde y no se recupera después.
+# Cada línea es un hueco:  día HH:MM tipo
 #
-# Días válidos: lunes martes miércoles jueves viernes sábado domingo
+#   Días:  lunes martes miércoles jueves viernes sábado domingo
+#   Tipos: carrusel | publicacion | historia
+#
+# En cada hueco se publica UN post de ese tipo: el más antiguo de los aprobados
+# (la cola de ese tipo). Si a esa hora no hay ninguno aprobado, el hueco se pierde
+# y no se recupera después. Dos huecos a la misma hora (con tipos distintos) salen juntos.
+#
 # Las horas son de la zona indicada abajo (con cambio de hora verano/invierno automático).
 #
 # Para cambiar la programación: edita este archivo y súbelo a GitHub (git push);
@@ -17,5 +21,6 @@ zona: Europe/Madrid
 # (cubre retrasos del aviso de GitHub Actions).
 tolerancia_minutos: 120
 
-martes 15:30
-jueves 19:00
+martes 15:30 carrusel
+jueves 19:00 publicacion
+jueves 19:00 historia

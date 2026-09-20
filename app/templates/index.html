@@ -2,7 +2,7 @@
 {% block title %}Borradores{% endblock %}
 
 {% macro card(p, eta=None) %}
-<a class="post-card" href="{{ url_for('post_page', pid=p.id) }}">
+<a class="post-card k-{{ p.kind }}" href="{{ url_for('post_page', pid=p.id) }}">
   {% if p.n_images %}
   <img src="{{ url_for('media', pid=p.id, n=0) }}" alt="Primera slide de «{{ p.title }}»" loading="lazy">
   {% else %}
@@ -15,7 +15,7 @@
     {% else %}
     <span class="muted">{{ (p.published_at or p.created_at) | fmt }}</span>
     {% endif %}
-    <span class="pill {{ p.status }}">{{ STATUS[p.status] }}</span>
+    <span class="tags"><span class="pill kind">{{ KIND[p.kind] }}</span><span class="pill {{ p.status }}">{{ STATUS[p.status] }}</span></span>
   </div>
 </a>
 {% endmacro %}
@@ -32,6 +32,10 @@
 
 {% if queue.schedule_error %}
 <div class="flash error">La programación (schedule.txt) no es válida y no se publicará nada: {{ queue.schedule_error }}</div>
+{% elif queue.no_slot %}
+<div class="flash error">
+  Hay posts aprobados de tipo {{ queue.no_slot | map('title') | join(', ') }} sin ningún hueco en schedule.txt: no se publicarán hasta que añadas uno.
+</div>
 {% elif groups.approved and queue.tick_stale %}
 <div class="flash error">
   El programador no se ha comunicado

@@ -39,9 +39,13 @@ def wait_until_ready(container_id: str, token: str) -> None:
     raise IGError(f"el contenedor {container_id} no terminó de procesarse a tiempo")
 
 
-def publish(image_urls: list[str], caption: str, user_id: str, token: str) -> dict:
-    """Publica 1 imagen o un carrusel (2-10). Devuelve {"media_id", "permalink"}."""
-    if len(image_urls) == 1:
+def publish(image_urls: list[str], caption: str, user_id: str, token: str, kind: str = "carrusel") -> dict:
+    """Publica una historia (1 imagen), una publicación (1 imagen) o un carrusel (2-10).
+    Devuelve {"media_id", "permalink"}. Las historias no admiten texto de publicación."""
+    if kind == "historia":
+        container = api_call("POST", f"{user_id}/media", token,
+                             media_type="STORIES", image_url=image_urls[0])["id"]
+    elif len(image_urls) == 1:
         container = api_call("POST", f"{user_id}/media", token,
                              image_url=image_urls[0], caption=caption)["id"]
     else:

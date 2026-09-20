@@ -1,17 +1,22 @@
 name: Programador de publicaciones
 
-# Avisa a la app cada 30 minutos. La app decide si toca publicar según app/schedule.txt
-# (un post por hueco, el más antiguo de la cola). GitHub Actions no despierta a su hora
-# exacta: puede tardar unos minutos.
+# Avisa a la app cada 30 minutos. La app decide qué toca publicar según app/schedule.txt
+# (un post por hueco y tipo: el más antiguo de la cola de ese tipo). GitHub Actions no
+# despierta a su hora exacta: puede tardar unos minutos.
 on:
   schedule:
     - cron: "*/30 * * * *"
   workflow_dispatch:
     inputs:
       forzar:
-        description: "PRUEBA: publicar YA el post más antiguo de la cola, sin esperar al hueco"
+        description: "PRUEBA: publicar YA el post aprobado más antiguo, sin esperar al hueco"
         type: boolean
         default: false
+      tipo:
+        description: "Solo con «forzar»: qué tipo publicar (cualquiera = el más antiguo de todos)"
+        type: choice
+        options: [cualquiera, carrusel, publicacion, historia]
+        default: cualquiera
 
 permissions:
   actions: write   # para reactivar este workflow y que GitHub no lo desactive por inactividad
@@ -23,13 +28,14 @@ concurrency:
 jobs:
   tick:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - name: Avisar a la app
         env:
           APP_URL: ${{ secrets.APP_URL }}
           APP_API_KEY: ${{ secrets.APP_API_KEY }}
           FORZAR: ${{ inputs.forzar }}
+          TIPO: ${{ inputs.tipo }}
         run: |
           set -euo pipefail
           if [ -z "${APP_URL}" ] || [ -z "${APP_API_KEY}" ]; then
@@ -38,28 +44,39 @@ jobs:
           fi
           base="${APP_URL%/}"
           url="${base}/api/cron/tick"
-          if [ "${FORZAR:-false}" = "true" ]; then url="${url}?force=1"; fi
+          if [ "${FORZAR:-false}" = "true" ]; then
+            url="${url}?force=1"
+            if [ -n "${TIPO:-}" ] && [ "${TIPO}" != "cualquiera" ]; then url="${url}&kind=${TIPO}"; fi
+          fi
 
           # el plan gratuito de Render tarda ~1 min en despertar: se reintenta
           resp=$(curl -fsS --retry 5 --retry-delay 20 --retry-all-errors --max-time 180 \
                  -X POST -H "Authorization: Bearer ${APP_API_KEY}" "$url")
           echo "$resp"
-          [ "$(echo "$resp" | jq -r '.action // empty')" = "publishing" ] || exit 0
+          ids=$(echo "$resp" | jq -r '.post_ids[]?')
+          [ -n "$ids" ] || exit 0
 
-          # hay una publicación en curso: se espera al resultado para que un fallo avise por correo
-          id=$(echo "$resp" | jq -r '.post_id')
-          for _ in $(seq 1 60); do
-            sleep 10
-            st=$(curl -fsS --retry 3 --max-time 60 -H "Authorization: Bearer ${APP_API_KEY}" "${base}/api/posts/${id}")
-            status=$(echo "$st" | jq -r '.status')
-            echo "estado: ${status}"
-            case "$status" in
-              published) echo "Publicado: $(echo "$st" | jq -r '.permalink')"; exit 0 ;;
-              failed) echo "::error::La publicación falló: $(echo "$st" | jq -r '.error')"; exit 1 ;;
-            esac
+          # hay publicaciones en curso: se espera a cada resultado para que un fallo avise por correo
+          fail=0
+          for id in $ids; do
+            result=""
+            for _ in $(seq 1 60); do
+              sleep 10
+              st=$(curl -fsS --retry 3 --max-time 60 -H "Authorization: Bearer ${APP_API_KEY}" "${base}/api/posts/${id}")
+              status=$(echo "$st" | jq -r '.status')
+              kind=$(echo "$st" | jq -r '.kind')
+              echo "${kind} ${id}: ${status}"
+              case "$status" in
+                published) echo "Publicado (${kind}): $(echo "$st" | jq -r '.permalink')"; result=ok; break ;;
+                failed) echo "::error::La publicación (${kind}) falló: $(echo "$st" | jq -r '.error')"; result=fail; break ;;
+              esac
+            done
+            if [ "$result" != "ok" ]; then
+              [ "$result" = "fail" ] || echo "::error::La publicación ${id} no terminó en 10 minutos"
+              fail=1
+            fi
           done
-          echo "::error::La publicación no terminó en 10 minutos"
-          exit 1
+          exit $fail
 
       - name: Mantener activo el programador
         if: always()

@@ -54,3 +54,10 @@ script mide el ancho real con la fuente exacta (Pillow + `getbbox`) y hace
 wrap automático. Si un slide queda muy denso (el script avisa con
 "⚠ POSIBLE OVERFLOW"), la solución es acortar el copy o subir `start_y`, no
 forzar el tamaño de fuente hacia abajo (rompe la jerarquía visual).
+
+## Formatos
+- **carrusel** y **publicacion**: 1080x1350 (4:5). La publicación va sin flecha de deslizar
+  ni numeración; el CTA (`cta_text`) va abajo a la izquierda.
+- **historia**: 1080x1920 (9:16). Instagram superpone su interfaz en los ~250 px de arriba
+  y de abajo: cabecera en y=300, texto desde y≈760 y pie/CTA por encima de y≈1620. Sin flecha.
+  Es una sola imagen sin caption: el mensaje va entero en la imagen y debe leerse en segundos.

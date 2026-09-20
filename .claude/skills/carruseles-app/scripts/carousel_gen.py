@@ -1,30 +1,38 @@
 """
-Generador de carruseles de Instagram para trabajoenexcel.com.
-Dibuja slides 1080x1350 con Pillow (wrap de texto medido con la fuente real,
-sin overflow) y los guarda como JPG, el único formato que admite la API de
-Instagram. No necesita rsvg ni fuentes del sistema: usa las de assets/fonts.
+Generador de imágenes de Instagram para trabajoenexcel.com.
+Dibuja con Pillow (wrap de texto medido con la fuente real, sin overflow) y guarda JPG,
+el único formato que admite la API de Instagram. No necesita rsvg ni fuentes del
+sistema: usa las de assets/fonts.
 
 Uso:
-    python carousel_gen.py slides.json /tmp/post
+    python carousel_gen.py slides.json /tmp/post [--format carrusel|publicacion|historia]
+
+Formatos (--format, por defecto carrusel):
+    carrusel     2-10 slides de 1080x1350 (4:5), con flecha de deslizar y numeración
+    publicacion  1 imagen de 1080x1350 (4:5), sin flecha ni numeración
+    historia     1 imagen de 1080x1920 (9:16), con márgenes de seguridad arriba y abajo
+                 (~250 px que Instagram tapa con su interfaz) y sin flecha
 
 Genera slide-01.jpg, slide-02.jpg... en la carpeta de salida.
 
 slides.json: lista de objetos con esta forma:
 {
   "runs": [["TEXTO BOLD EN MAYUSCULAS", "bold"], ["frase en italica verde", "italic"]],
-  "slide_no": "01 / 06",      // opcional, null en el slide de CTA
-  "cta_text": "PLANTILLA DE SPRINT.",  // opcional, solo en el slide final
-  "swipe_hint": true,          // opcional, default true; false si hay cta_text
+  "slide_no": "01 / 06",      // opcional, solo carrusel; null en el slide de CTA
+  "cta_text": "PLANTILLA DE SPRINT.",  // opcional, solo en el slide final / imagen única
+  "swipe_hint": true,          // opcional, solo carrusel; false si hay cta_text
   "start_y": 520               // opcional, ajustar si el bloque de texto es largo
 }
 
 Requiere: pip install Pillow
 """
-import sys, json
+import argparse
+import json
+import sys
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
-W, H = 1080, 1350
+W = 1080
 S = 2                # supersampling: se dibuja a 2x y se reduce (bordes suaves)
 BG = "#F4EFE1"       # cream / hueso (trabajoenexcel.com)
 DARK = "#182A20"     # texto principal
@@ -33,6 +41,19 @@ GREY = "#8A9088"
 
 MARGIN = 90
 MAX_W = W - 2 * MARGIN
+
+
+def _layout(h, header_y, start_y, line_y, url_y, cta_y, arrows, numbering, limit):
+    return {"H": h, "header_y": header_y, "start_y": start_y, "line_y": line_y, "url_y": url_y,
+            "cta_y": cta_y, "arrows": arrows, "numbering": numbering, "limit": limit}
+
+
+LAYOUTS = {
+    "carrusel": _layout(1350, 90, 520, 1350 - 90, 1350 - 60, 1350 - 160, True, True, 1350 - 200),
+    "publicacion": _layout(1350, 90, 520, 1350 - 90, 1350 - 60, 1350 - 160, False, False, 1350 - 200),
+    # historia: Instagram tapa ~250 px arriba y abajo; nada importante fuera de y=250..1670
+    "historia": _layout(1920, 300, 760, 1920 - 330, 1920 - 300, 1920 - 430, False, False, 1920 - 560),
+}
 
 FONTS = Path(__file__).resolve().parent.parent / "assets" / "fonts"
 BOLD_PATH = str(FONTS / "DejaVuSansCondensed-Bold.ttf")
@@ -97,48 +118,62 @@ def arrow_icon(d, cx, cy, color=ACCENT, r=42):
     d.line([(cx + 2) * S, (cy - 12) * S, (cx + 16) * S, cy * S], fill=color, width=lw)
     d.line([(cx + 2) * S, (cy + 12) * S, (cx + 16) * S, cy * S], fill=color, width=lw)
 
-def build_slide(runs, header_left="TRABAJO EN EXCEL", header_right="SOCIAL AD",
+def build_slide(runs, fmt="carrusel", header_left="TRABAJO EN EXCEL", header_right="SOCIAL AD",
                 cta_text=None, footer="TRABAJOENEXCEL.COM", swipe_hint=True,
-                slide_no=None, start_y=520):
+                slide_no=None, start_y=None):
+    L = LAYOUTS[fmt]
+    H = L["H"]
+    if start_y is None:
+        start_y = L["start_y"]
     img = Image.new("RGB", (W * S, H * S), BG)
     d = ImageDraw.Draw(img)
 
     end_y = draw_runs(d, runs, start_y)
 
     # cabecera: marca con ® en superíndice + etiqueta a la derecha
-    x_end = draw_text(d, MARGIN, 90, header_left, BOLD_PATH, 30, DARK, spacing=2)
-    d.text((x_end, 76 * S), "®", font=get_font(BOLD_PATH, 18 * S), fill=DARK, anchor="ls")
-    draw_text(d, W - MARGIN, 90, header_right, REGULAR_PATH, 24, GREY, spacing=3, anchor="r")
+    hy = L["header_y"]
+    x_end = draw_text(d, MARGIN, hy, header_left, BOLD_PATH, 30, DARK, spacing=2)
+    d.text((x_end, (hy - 14) * S), "®", font=get_font(BOLD_PATH, 18 * S), fill=DARK, anchor="ls")
+    draw_text(d, W - MARGIN, hy, header_right, REGULAR_PATH, 24, GREY, spacing=3, anchor="r")
 
-    # pie: línea, url y, según el slide, CTA / flecha / numeración
-    line_y = H - 90
+    # pie: línea, url y, según el formato, CTA / flecha / numeración
+    line_y = L["line_y"]
     x2 = 380 if cta_text else 290
     d.rectangle([MARGIN * S, (line_y - 2) * S, x2 * S, (line_y + 2) * S], fill=ACCENT)
-    draw_text(d, W - MARGIN, H - 60, footer, REGULAR_PATH, 22, GREY, spacing=2, anchor="r")
+    draw_text(d, W - MARGIN, L["url_y"], footer, REGULAR_PATH, 22, GREY, spacing=2, anchor="r")
     if cta_text:
-        draw_text(d, MARGIN, H - 160, cta_text, BOLD_PATH, 40, ACCENT, spacing=1)
-        arrow_icon(d, W - 160, H - 185)
-    elif swipe_hint:
-        arrow_icon(d, W - 160, H - 185, r=36)
-    if slide_no:
-        draw_text(d, MARGIN, H - 160, slide_no, REGULAR_PATH, 22, GREY, spacing=2)
+        draw_text(d, MARGIN, L["cta_y"], cta_text, BOLD_PATH, 40, ACCENT, spacing=1)
+        if L["arrows"]:
+            arrow_icon(d, W - 160, L["cta_y"] - 25)
+    elif swipe_hint and L["arrows"]:
+        arrow_icon(d, W - 160, L["cta_y"] - 25, r=36)
+    if slide_no and L["numbering"]:
+        draw_text(d, MARGIN, L["cta_y"], slide_no, REGULAR_PATH, 22, GREY, spacing=2)
 
     return img.resize((W, H), Image.LANCZOS), end_y
 
 def main():
     sys.stdout.reconfigure(encoding="utf-8")
-    spec_path, out_dir = sys.argv[1], sys.argv[2]
-    out = Path(out_dir)
+    parser = argparse.ArgumentParser(description="Genera las imágenes JPG de un post de Instagram")
+    parser.add_argument("spec")
+    parser.add_argument("out_dir")
+    parser.add_argument("--format", dest="fmt", choices=sorted(LAYOUTS), default="carrusel")
+    args = parser.parse_args()
+
+    out = Path(args.out_dir)
     out.mkdir(parents=True, exist_ok=True)
-    slides = json.loads(Path(spec_path).read_text(encoding="utf-8"))
+    slides = json.loads(Path(args.spec).read_text(encoding="utf-8"))
+    if args.fmt != "carrusel" and len(slides) != 1:
+        sys.exit(f"El formato {args.fmt} lleva exactamente 1 imagen (el JSON tiene {len(slides)}).")
+    H = LAYOUTS[args.fmt]["H"]
     for i, sdef in enumerate(slides, start=1):
         runs = [tuple(r) for r in sdef["runs"]]
         kwargs = {k: v for k, v in sdef.items() if k != "runs"}
-        img, end_y = build_slide(runs, **kwargs)
+        img, end_y = build_slide(runs, fmt=args.fmt, **kwargs)
         name = f"slide-{i:02d}.jpg"
         img.save(out / name, "JPEG", quality=95)
-        overflow = " ⚠ POSIBLE OVERFLOW (ajusta start_y o acorta el texto)" if end_y > H - 200 else ""
-        print(f"{name}  (texto termina en y={end_y}){overflow}")
+        overflow = " ⚠ POSIBLE OVERFLOW (ajusta start_y o acorta el texto)" if end_y > LAYOUTS[args.fmt]["limit"] else ""
+        print(f"{name}  {img.width}x{H}  (texto termina en y={end_y}){overflow}")
 
 if __name__ == "__main__":
     main()

@@ -6,11 +6,15 @@ import datetime as dt
 import io
 import json
 import os
+import sqlite3
 import tempfile
 import time
 import unittest
 
 _TMP = tempfile.mkdtemp()
+_CARRUSEL_ONLY = os.path.join(_TMP, "solo_carrusel.txt")
+with open(_CARRUSEL_ONLY, "w", encoding="utf-8") as _f:
+    _f.write("martes 15:30 carrusel\njueves 19:00 carrusel\n")
 os.environ.update(
     APP_ENV="dev", ADMIN_PASSWORD="clave-de-prueba", API_KEY="api-key-de-prueba",
     SECRET_KEY="secreto", SQLITE_PATH=os.path.join(_TMP, "test.db"), DATABASE_URL="",
@@ -40,18 +44,30 @@ def at(iso: str) -> dt.datetime:
     return dt.datetime.fromisoformat(iso)
 
 
-def jpeg(color="#F4EFE1") -> bytes:
+def jpeg(color="#F4EFE1", size=(108, 135)) -> bytes:
     buf = io.BytesIO()
-    Image.new("RGB", (108, 135), color).save(buf, "JPEG")
+    Image.new("RGB", size, color).save(buf, "JPEG")
     return buf.getvalue()
 
 
-def draft_form(**over):
+FEED = (108, 135)    # 4:5
+STORY = (108, 192)   # 9:16
+
+
+def draft_form(kind="carrusel", n=None, size=None, **over):
+    """Formulario de subida válido para cada tipo (se puede forzar nº de imágenes y tamaño)."""
     data = {"title": "Prueba", "caption": "Excel para tu día a día.\nHaz el test gratis en trabajoenexcel.com.",
             "hashtags": json.dumps(["excel", "#productividad"]),
             "slides_text": json.dumps(["TU EQUIPO HACE SPRINTS. Pero no hace Scrum."])}
+    if kind != "carrusel":
+        data["kind"] = kind
+    if kind == "historia":
+        data["caption"], data["hashtags"] = "", "[]"
     data.update(over)
-    data["slides"] = [(io.BytesIO(jpeg()), "slide-01.jpg"), (io.BytesIO(jpeg("#2F6B47")), "slide-02.jpg")]
+    n = n or (2 if kind == "carrusel" else 1)
+    size = size or (STORY if kind == "historia" else FEED)
+    data["slides"] = [(io.BytesIO(jpeg(("#F4EFE1", "#2F6B47", "#182A20")[i % 3], size)), f"slide-{i + 1:02d}.jpg")
+                      for i in range(n)]
     return data
 
 
@@ -63,7 +79,8 @@ class Base(unittest.TestCase):
             db.execute(conn, "DELETE FROM kv")
         self.client = server.app.test_client()
         self._publish, self._refresh, self._utcnow = instagram.publish, instagram.refresh, server.utcnow
-        self._schedule_file = schedule.SCHEDULE_FILE
+        self._schedule_file = schedule.SCHEDULE_FILE  # el de verdad (app/schedule.txt)
+        schedule.SCHEDULE_FILE = _CARRUSEL_ONLY
         instagram.refresh = lambda token: (_ for _ in ()).throw(instagram.IGError("no toca"))
 
     def tearDown(self):
@@ -71,12 +88,14 @@ class Base(unittest.TestCase):
         schedule.SCHEDULE_FILE = self._schedule_file
 
     # ayudas
-    def upload(self, **over):
-        return self.client.post("/api/drafts", headers=API, data=draft_form(**over),
+    def upload(self, kind="carrusel", **over):
+        return self.client.post("/api/drafts", headers=API, data=draft_form(kind, **over),
                                 content_type="multipart/form-data")
 
-    def draft(self, **over) -> str:
-        return self.upload(**over).get_json()["id"]
+    def draft(self, kind="carrusel", **over) -> str:
+        r = self.upload(kind, **over)
+        self.assertEqual(r.status_code, 201, r.get_data(as_text=True))
+        return r.get_json()["id"]
 
     def login(self, client=None):
         client = client or self.client
@@ -99,9 +118,10 @@ class Base(unittest.TestCase):
             data["confirm"] = "on"
         return self.client.post(f"/post/{pid}/approve", data=data)
 
-    def tick(self, when, force=False, headers=API):
+    def tick(self, when, force=False, headers=API, kind=None):
         server.utcnow = lambda: at(when)
-        return self.client.post("/api/cron/tick" + ("?force=1" if force else ""), headers=headers)
+        url = "/api/cron/tick" + ("?force=1" if force else "") + (f"{'&' if force else '?'}kind={kind}" if kind else "")
+        return self.client.post(url, headers=headers)
 
     def status(self, pid):
         with db.connect() as conn:
@@ -140,7 +160,7 @@ class ApiTests(Base):
     def test_rechaza_png_y_falsos_jpeg(self):
         buf = io.BytesIO()
         Image.new("RGB", (10, 10)).save(buf, "PNG")
-        form = draft_form()
+        form = draft_form("publicacion")
         form["slides"] = [(io.BytesIO(buf.getvalue()), "slide-01.jpg")]
         r = self.client.post("/api/drafts", headers=API, data=form, content_type="multipart/form-data")
         self.assertEqual(r.status_code, 422)
@@ -160,8 +180,44 @@ class ApiTests(Base):
         self.assertEqual(self.client.get("/api/posts").status_code, 401)
         rows = self.client.get("/api/posts?limit=1", headers=API).get_json()
         self.assertEqual(len(rows), 1)
-        self.assertEqual(set(rows[0]), {"id", "title", "status", "source_url", "created_at", "published_at"})
+        self.assertEqual(set(rows[0]), {"id", "title", "status", "kind", "source_url", "created_at", "published_at"})
         self.assertEqual(self.client.get("/api/posts?limit=x", headers=API).status_code, 400)
+
+    def test_publicacion_e_historia(self):
+        pub = self.upload("publicacion")
+        self.assertEqual(pub.status_code, 201, pub.get_data(as_text=True))
+        self.assertEqual(self.status(pub.get_json()["id"])["kind"], "publicacion")
+        his = self.upload("historia")
+        self.assertEqual(his.status_code, 201, his.get_data(as_text=True))
+        post = self.status(his.get_json()["id"])
+        self.assertEqual((post["kind"], post["caption"], post["hashtags"]), ("historia", "", "[]"))
+
+    def test_historia_ignora_caption_y_hashtags(self):
+        r = self.upload("historia", caption="texto que no se muestra", hashtags=json.dumps(["excel"]))
+        self.assertEqual(r.status_code, 201)
+        post = self.status(r.get_json()["id"])
+        self.assertEqual((post["caption"], post["hashtags"]), ("", "[]"))
+
+    def test_reglas_por_tipo(self):
+        self.assertEqual(self.upload("carrusel", n=1).status_code, 422)        # un carrusel lleva 2 o más
+        self.assertEqual(self.upload("publicacion", n=2).status_code, 422)     # una publicación, solo 1
+        self.assertEqual(self.upload("historia", n=2).status_code, 422)
+        self.assertEqual(self.upload("publicacion", caption="").status_code, 422)  # la publicación exige caption
+        self.assertEqual(self.upload("reel").status_code, 422)                 # tipo desconocido
+
+    def test_proporcion_de_imagen_por_tipo(self):
+        r = self.upload("historia", size=FEED)            # una imagen 4:5 no vale como historia
+        self.assertEqual(r.status_code, 422)
+        self.assertIn("9:16", r.get_json()["error"])
+        self.assertEqual(self.upload("publicacion", size=STORY).status_code, 422)   # 9:16 no vale en el feed
+        self.assertEqual(self.upload("publicacion", size=(108, 108)).status_code, 201)  # 1:1 sí
+        self.assertEqual(self.upload("carrusel", size=(190, 100)).status_code, 201)     # 1,9:1: dentro de 1,91
+        self.assertEqual(self.upload("carrusel", size=(200, 100)).status_code, 422)     # 2:1: fuera del máximo
+
+    def test_jpeg_size(self):
+        self.assertEqual(server.jpeg_size(jpeg(size=(108, 192))), (108, 192))
+        self.assertEqual(server.jpeg_size(jpeg(size=(1080, 1350))), (1080, 1350))
+        self.assertIsNone(server.jpeg_size(b"\xff\xd8\xff\xd9"))
 
     def test_limites(self):
         self.assertEqual(self.upload(caption="x" * 2300).status_code, 422)
@@ -225,48 +281,54 @@ class AccessTests(Base):
 
 class ScheduleTests(unittest.TestCase):
     def setUp(self):
-        self.cfg = schedule.load()
+        self.cfg = schedule.load(os.path.join(os.path.dirname(os.path.abspath(__file__)), "schedule.txt"))
 
     def test_archivo_por_defecto(self):
         self.assertEqual(self.cfg.tz_name, "Europe/Madrid")
-        self.assertEqual([(d, f"{t:%H:%M}") for d, t in self.cfg.slots], [(1, "15:30"), (3, "19:00")])
-        self.assertEqual(self.cfg.describe(), "martes 15:30, jueves 19:00")
+        self.assertEqual([(d, f"{t:%H:%M}", k) for d, t, k in self.cfg.slots],
+                         [(1, "15:30", "carrusel"), (3, "19:00", "historia"), (3, "19:00", "publicacion")])
+        self.assertEqual(self.cfg.describe(),
+                         "martes 15:30 (carrusel), jueves 19:00 (historia), jueves 19:00 (publicación)")
 
     def test_hueco_vigente_verano(self):
-        self.assertIsNone(self.cfg.due_slot(at("2026-09-22T13:29:00+00:00")))
-        self.assertEqual(self.cfg.due_slot(at(TUE_SLOT)), at(TUE_SLOT))
-        self.assertEqual(self.cfg.due_slot(at("2026-09-22T15:29:00+00:00")), at(TUE_SLOT))
-        self.assertIsNone(self.cfg.due_slot(at(TUE_TOO_LATE)))
-        self.assertEqual(self.cfg.due_slot(at(THU_SLOT)), at(THU_SLOT))
-        self.assertIsNone(self.cfg.due_slot(at(MON)))
+        self.assertEqual(self.cfg.due_slots(at("2026-09-22T13:29:00+00:00")), {})
+        self.assertEqual(self.cfg.due_slots(at(TUE_SLOT)), {"carrusel": at(TUE_SLOT)})
+        self.assertEqual(self.cfg.due_slots(at("2026-09-22T15:29:00+00:00")), {"carrusel": at(TUE_SLOT)})
+        self.assertEqual(self.cfg.due_slots(at(TUE_TOO_LATE)), {})
+        self.assertEqual(self.cfg.due_slots(at(THU_SLOT)),
+                         {"publicacion": at(THU_SLOT), "historia": at(THU_SLOT)})
+        self.assertEqual(self.cfg.due_slots(at(MON)), {})
 
     def test_cambio_de_hora_invierno(self):
-        self.assertEqual(self.cfg.due_slot(at(TUE_WINTER)), at(TUE_WINTER))
-        self.assertIsNone(self.cfg.due_slot(at("2026-12-01T13:30:00+00:00")))  # 14:30 en Madrid: aún no
+        self.assertEqual(self.cfg.due_slots(at(TUE_WINTER)), {"carrusel": at(TUE_WINTER)})
+        self.assertEqual(self.cfg.due_slots(at("2026-12-01T13:30:00+00:00")), {})  # 14:30 en Madrid: aún no
 
-    def test_proximos_huecos(self):
+    def test_proximos_huecos_por_tipo(self):
         now = at("2026-09-22T10:00:00+00:00")
-        got = self.cfg.upcoming(now, None, 3)
-        self.assertEqual(got, [at(TUE_SLOT), at(THU_SLOT), at("2026-09-29T13:30:00+00:00")])
-        self.assertEqual(self.cfg.upcoming(now, at(TUE_SLOT), 2), [at(THU_SLOT), at("2026-09-29T13:30:00+00:00")])
+        self.assertEqual(self.cfg.upcoming(now, None, 3, "carrusel"),
+                         [at(TUE_SLOT), at("2026-09-29T13:30:00+00:00"), at("2026-10-06T13:30:00+00:00")])
+        self.assertEqual(self.cfg.upcoming(now, at(TUE_SLOT), 1, "carrusel"), [at("2026-09-29T13:30:00+00:00")])
+        self.assertEqual(self.cfg.upcoming(now, None, 2, "historia"), [at(THU_SLOT), at("2026-10-01T17:00:00+00:00")])
         self.assertEqual(self.cfg.label(at(TUE_SLOT)), "martes 22 sep, 15:30")
 
     def test_errores_de_formato(self):
-        for text in ["lunes 25:00", "foo 10:00", "martes", "zona: Marte/Olimpo\nmartes 10:00",
-                     "tolerancia_minutos: mucha\nmartes 10:00", "# solo comentarios"]:
+        for text in ["lunes 25:00 carrusel", "foo 10:00 carrusel", "martes 10:00", "martes carrusel",
+                     "martes 10:00 reel", "zona: Marte/Olimpo\nmartes 10:00 carrusel",
+                     "tolerancia_minutos: mucha\nmartes 10:00 carrusel", "# solo comentarios"]:
             with self.assertRaises(schedule.ScheduleError, msg=text):
                 schedule.parse(text)
 
     def test_acentos_y_varios_huecos(self):
-        cfg = schedule.parse("miércoles 9:05\nmiercoles 18:00\nsábado 10:00")
+        cfg = schedule.parse("miércoles 9:05 publicación\nmiercoles 18:00 historia\nsábado 10:00 carrusel")
         self.assertEqual(len(cfg.slots), 3)
+        self.assertEqual(cfg.kinds(), {"publicacion", "historia", "carrusel"})
 
 
 class QueueTests(Base):
     """Aprobar pone en cola; publica el aviso del programador en su hueco."""
 
     def fake_publish(self, calls=None):
-        def fake(urls, caption, user_id, token):
+        def fake(urls, caption, user_id, token, **kw):
             if calls is not None:
                 calls.append(urls)
             return {"media_id": "123", "permalink": "https://www.instagram.com/p/XYZ/"}
@@ -310,7 +372,7 @@ class QueueTests(Base):
         pid = self.draft()
         seen = {}
 
-        def fake_publish(urls, caption, user_id, token):
+        def fake_publish(urls, caption, user_id, token, **kw):
             anon = server.app.test_client()  # sin sesión, como Instagram
             seen["anon"] = [anon.get(u.replace("http://localhost", "")).status_code for u in urls]
             seen["urls"], seen["caption"], seen["token"] = urls, caption, token
@@ -364,7 +426,7 @@ class QueueTests(Base):
     def test_fallo_conserva_imagenes_y_oculta_credenciales(self):
         pid = self.draft()
 
-        def failing(urls, caption, user_id, token):
+        def failing(urls, caption, user_id, token, **kw):
             raise instagram.IGError(f"API 400 en {user_id}/media con {token}: Invalid OAuth access token")
 
         instagram.publish = failing
@@ -431,7 +493,7 @@ class QueueTests(Base):
         self.tick("2026-09-22T10:00:00+00:00")
         html = self.client.get("/").get_data(as_text=True)
         self.assertNotIn("El programador no se ha comunicado", html)
-        self.assertIn("martes 15:30, jueves 19:00", html)
+        self.assertIn("martes 15:30 (carrusel), jueves 19:00 (carrusel)", html)
         page = self.client.get(f"/post/{pid}").get_data(as_text=True)
         self.assertIn("Sacar de la cola", page)
 
@@ -444,6 +506,126 @@ class QueueTests(Base):
         self.assertEqual(r.status_code, 500)
         self.login()
         self.assertIn("no es válida", self.client.get("/").get_data(as_text=True))
+
+
+class KindQueueTests(Base):
+    """Un hueco por tipo (schedule.txt real): carrusel el martes; publicación e historia el jueves."""
+
+    def setUp(self):
+        super().setUp()
+        schedule.SCHEDULE_FILE = self._schedule_file
+        self.calls = []
+
+        def fake(urls, caption, user_id, token, kind="carrusel"):
+            self.calls.append({"kind": kind, "n": len(urls), "caption": caption})
+            return {"media_id": kind, "permalink": f"https://www.instagram.com/p/{kind}/"}
+
+        instagram.publish = fake
+
+    def test_publicacion_e_historia_salen_juntas_el_jueves(self):
+        car, pub, his = self.draft("carrusel"), self.draft("publicacion"), self.draft("historia")
+        for pid in (car, pub, his):
+            self.approve(pid)
+        self.assertEqual(self.tick(MON).get_json()["action"], "idle")
+        r = self.tick(THU_SLOT).get_json()
+        self.assertEqual(r["action"], "publishing")
+        self.assertEqual({p["kind"] for p in r["posts"]}, {"publicacion", "historia"})
+        self.wait_for(pub, {"published"})
+        self.wait_for(his, {"published"})
+        self.assertEqual(self.status(car)["status"], "approved")   # el carrusel espera a su hueco del martes
+        by_kind = {c["kind"]: c for c in self.calls}
+        self.assertEqual(by_kind["historia"]["caption"], "")       # las historias no llevan texto
+        self.assertEqual((by_kind["historia"]["n"], by_kind["publicacion"]["n"]), (1, 1))
+        self.assertIn("#excel", by_kind["publicacion"]["caption"])
+        for pid in (pub, his):
+            self.assertEqual(self.n_images(pid), 0)                # se borran las imágenes de ambos
+        # la semana siguiente le toca al carrusel
+        self.assertEqual(self.tick("2026-09-29T13:30:00+00:00").get_json()["post_id"], car)
+        self.wait_for(car, {"published"})
+        self.assertEqual([c["kind"] for c in self.calls].count("carrusel"), 1)
+
+    def test_cada_tipo_tiene_su_cola_y_su_hueco(self):
+        h1, h2 = self.draft("historia", title="H1"), self.draft("historia", title="H2")
+        self.approve(h1)
+        self.approve(h2)
+        self.assertEqual(self.tick(THU_SLOT).get_json()["post_id"], h1)   # solo una historia por hueco
+        self.wait_for(h1, {"published"})
+        self.assertEqual(self.tick("2026-09-24T17:30:00+00:00").get_json()["action"], "slot-used")
+        self.assertEqual(self.status(h2)["status"], "approved")
+
+    def test_hueco_de_un_tipo_sin_posts_no_afecta_al_otro(self):
+        pub = self.draft("publicacion")
+        self.approve(pub)                                          # no hay historia aprobada
+        r = self.tick(THU_SLOT).get_json()
+        self.assertEqual([p["kind"] for p in r["posts"]], ["publicacion"])
+        self.wait_for(pub, {"published"})
+        his = self.draft("historia")
+        self.approve(his)                                          # tarde: su hueco de esta semana ya pasó
+        self.assertEqual(self.tick("2026-09-24T17:40:00+00:00").get_json()["action"], "slot-used")
+        self.assertEqual(self.status(his)["status"], "approved")
+
+    def test_forzar_un_tipo_concreto(self):
+        car, his = self.draft("carrusel"), self.draft("historia")
+        self.approve(car)
+        self.approve(his)
+        self.assertEqual(self.tick(MON, force=True, kind="historia").get_json()["post_id"], his)
+        self.wait_for(his, {"published"})
+        self.assertEqual(self.status(car)["status"], "approved")
+        self.assertEqual(self.tick(MON, force=True, kind="reel").status_code, 400)
+
+    def test_un_fallo_no_impide_publicar_el_otro_tipo(self):
+        pub, his = self.draft("publicacion"), self.draft("historia")
+        self.approve(pub)
+        self.approve(his)
+
+        def fake(urls, caption, user_id, token, kind="carrusel"):
+            if kind == "publicacion":
+                raise instagram.IGError("API 400: fallo simulado")
+            return {"media_id": "1", "permalink": ""}
+
+        instagram.publish = fake
+        self.tick(THU_SLOT)
+        self.wait_for(pub, {"failed"})
+        self.wait_for(his, {"published"})
+
+    def test_panel_hora_prevista_por_tipo_y_aviso_sin_hueco(self):
+        car, his = self.draft("carrusel"), self.draft("historia")
+        self.approve(car)
+        self.approve(his)
+        server.utcnow = lambda: at("2026-09-21T10:00:00+00:00")
+        html = self.client.get("/").get_data(as_text=True)
+        self.assertIn("Sale: martes 22 sep, 15:30", html)
+        self.assertIn("Sale: jueves 24 sep, 19:00", html)
+        self.assertIn("Historia", html)
+        page = self.client.get(f"/post/{his}").get_data(as_text=True)
+        self.assertIn("no llevan texto de publicación", page)
+        # un tipo aprobado sin hueco definido se avisa
+        only = os.path.join(_TMP, "sin_historias.txt")
+        with open(only, "w", encoding="utf-8") as f:
+            f.write("martes 15:30 carrusel\n")
+        schedule.SCHEDULE_FILE = only
+        self.assertIn("sin ningún hueco en schedule.txt", self.client.get("/").get_data(as_text=True))
+
+    def test_migracion_de_una_base_sin_columna_kind(self):
+        old = os.path.join(_TMP, "vieja.db")
+        con = sqlite3.connect(old)
+        con.execute("CREATE TABLE posts (id TEXT PRIMARY KEY, title TEXT NOT NULL, status TEXT NOT NULL, "
+                    "caption TEXT NOT NULL, hashtags TEXT NOT NULL, slides_text TEXT NOT NULL, source_url TEXT, "
+                    "created_at TEXT NOT NULL, updated_at TEXT NOT NULL, approved_at TEXT, published_at TEXT, "
+                    "media_id TEXT, permalink TEXT, error TEXT)")
+        con.execute("INSERT INTO posts (id, title, status, caption, hashtags, slides_text, created_at, updated_at) "
+                    "VALUES ('x', 'Viejo', 'published', 'c', '[]', '[]', 'a', 'b')")
+        con.commit()
+        con.close()
+        previous = db.SQLITE_PATH
+        db.SQLITE_PATH = old
+        try:
+            db.init_db()
+            db.init_db()  # es idempotente
+            with db.connect() as conn:
+                self.assertEqual(db.one(conn, "SELECT kind FROM posts WHERE id = 'x'")["kind"], "carrusel")
+        finally:
+            db.SQLITE_PATH = previous
 
 
 class TokenTests(Base):

@@ -1,21 +1,24 @@
-# IG_RRSS — carruseles de Instagram con aprobación
+# IG_RRSS — contenido de Instagram con aprobación
 
-Genera carruseles para **@trabajoenexcel** (promocionan trabajoenexcel.com), los
-sube como borrador a una app web de aprobación y, cuando el usuario los aprueba
+Genera contenido para **@trabajoenexcel** (promociona trabajoenexcel.com) en tres tipos:
+**carrusel**, **publicación de una imagen** e **historia** (una imagen 9:16, sin texto de
+publicación). Lo sube como borrador a una app web de aprobación y, cuando el usuario los aprueba
 allí, se publican en Instagram. Repo: `JAESCOBARC/IG_RRSS` (**público**).
 
 ## Cómo funciona
-1. Claude genera las slides (JPG) y el texto **en un directorio temporal** con la
-   skill `carruseles-app` y ejecuta `scripts/upload_draft.py`.
+1. Claude genera las imágenes (JPG) y el texto **en un directorio temporal** con la
+   skill `carruseles-app` (`--format carrusel|publicacion|historia`) y ejecuta
+   `scripts/upload_draft.py`.
 2. La app (`app/`, Flask, desplegada en Render; blueprint en `render.yaml`) guarda
    el borrador en Postgres (Neon) y lo muestra en un panel con contraseña: slides,
    caption y hashtags, con botones «Aprobar y poner en cola» / «Rechazar».
 3. Al aprobar, el post pasa a la **cola**. Un workflow (`tick.yml`) avisa a la app
-   cada 30 min y, en cada hueco de `app/schedule.txt` (martes 15:30 y jueves 19:00,
-   hora de España peninsular), **la app publica el post más antiguo de la cola**
+   cada 30 min y, en cada hueco de `app/schedule.txt` —cada hueco es «día hora tipo»:
+   carrusel el martes 15:30; publicación e historia el jueves 19:00, hora de España
+   peninsular—, **la app publica el post más antiguo de la cola de ese tipo**
    (sirviendo ella misma las imágenes por una URL pública, solo mientras dura la
    publicación) y **borra los JPG**. Solo conserva título, texto, estado y enlace.
-   Si en un hueco no hay nada aprobado, ese hueco se pierde.
+   Si en un hueco no hay nada aprobado de ese tipo, ese hueco se pierde.
 4. El token de Instagram se renueva solo (al iniciar sesión o publicar, cada
    20 días) y se guarda en la base de datos.
 
@@ -24,11 +27,14 @@ JPG en el historial aunque se borren.
 
 ## Crear posts
 Usa la skill **`carruseles-app`** (`.claude/skills/carruseles-app/`) siempre que
-se pida un carrusel o un post. Las URLs a promocionar están en `url.txt`; los
+se pida un carrusel, una publicación, una historia o un post. Las URLs a promocionar están en `url.txt`; los
 ángulos verificados de cada una, en `references/urls.md` de la skill.
 **Cada lunes** una rutina programada de Claude en la nube genera la **tanda semanal**
-(3 borradores sobre 3 URLs de `url.txt` elegidas al azar con `scripts/pick_urls.py`,
-sin repetir temas recientes; ver «Tanda semanal» en la skill). El usuario aprueba los 2 mejores antes de los huecos del martes y el jueves. La skill
+(3 borradores, uno de cada tipo: un **carrusel** de servicios, una **publicación de una
+imagen** con un truco de Excel y una **historia** con una promoción breve; las URLs se
+sortean de `url.txt` con `scripts/pick_urls.py` y no se repiten temas recientes; ver
+«Tanda semanal» en la skill). El usuario los aprueba antes de sus huecos (el carrusel,
+antes del martes 15:30; la publicación y la historia, antes del jueves 19:00). La skill
 termina subiendo el borrador y dándole al usuario el enlace del panel.
 
 ## Reglas
@@ -39,7 +45,7 @@ termina subiendo el borrador y dándole al usuario el enlace del panel.
 - **El tema sale de las URLs de `url.txt`**.
 - **Claude no publica ni aprueba:** publicar es una acción sobre una cuenta real y
   la autoriza el usuario en el panel. Claude solo sube borradores. Tampoco lanza el
-  workflow con «forzar» (publica fuera de hueco): es solo una prueba manual del usuario.
+  workflow con «forzar» (publica fuera de hueco, y admite elegir el tipo): es solo una prueba manual del usuario.
 - **Horarios:** solo los de `app/schedule.txt`. Para cambiarlos se edita ese archivo.
 - **Un post `failed` no se reintenta a ciegas**: puede haberse publicado ya.
   Se comprueba el perfil antes de reabrirlo.
@@ -50,7 +56,10 @@ termina subiendo el borrador y dándole al usuario el enlace del panel.
   entorno de Render, en `.env` local (ignorado por git) y, para la rutina de la nube, en
   las «credenciales de API» de su entorno (no como variable de entorno: esas las ve
   cualquiera que use el entorno). No se pegan en el chat.
-- Máximo 2200 caracteres de caption y 30 hashtags (la skill usa 3-6).
+- Máximo 2200 caracteres de caption y 30 hashtags (la skill usa 3-6). **Las historias no
+  llevan caption ni hashtags** (la API no los admite): todo el mensaje va en la imagen.
+- **Tipos e imágenes:** carrusel 2-10 imágenes y publicación/historia 1 sola; feed 4:5
+  (1080x1350) e historia 9:16 (1080x1920). La app rechaza lo que no cumpla.
 - Commits: mensaje corto en inglés, como los existentes.
 
 ## Comandos
