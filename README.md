@@ -62,15 +62,23 @@ Para no esperar al cron: pestaña **Actions → Publicar en Instagram → Run wo
 | `published` | Publicado (el script añade `published_at`, `media_id`, `permalink`) |
 | `failed` | Falló (el script añade `error`). **No se reintenta solo**, para evitar duplicados. Revisa el error, corrígelo y vuelve a poner `approved` |
 
-## 3. Renovar el token (cada ~50 días)
+## 3. Renovar el token
 
-El token caduca a los 60 días. Antes de eso (y pasadas 24 h desde que se emitió):
+El token caduca a los 60 días, pero se puede renovar mientras no haya caducado (y pasadas 24 h desde que se emitió). El workflow `refresh-token.yml` lo hace solo el día 1 de cada mes y actualiza el secret `IG_ACCESS_TOKEN`.
+
+Configuración (una sola vez): GitHub no deja que un workflow modifique secrets con su token normal, así que hace falta un token personal:
+
+1. GitHub → *Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token*.
+2. *Repository access*: **Only select repositories** → este repo. *Permissions → Repository permissions → Secrets*: **Read and write**.
+3. Guarda el token como secret del repo con nombre `GH_PAT` (`gh secret set GH_PAT --repo USUARIO/REPO`).
+
+Si el PAT caduca o el token de Instagram llega a caducar, el workflow falla y hay que generar uno nuevo desde el panel de Meta (sección 1.2-1.3). También puedes renovar a mano:
 
 ```bash
 curl -s "https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token&access_token=TOKEN_ACTUAL"
 ```
 
-Copia el nuevo `access_token` al secret `IG_ACCESS_TOKEN`. Apunta en tu calendario un recordatorio a los 50 días.
+y copiar el nuevo `access_token` al secret `IG_ACCESS_TOKEN`.
 
 ## Prueba en local (sin publicar)
 
