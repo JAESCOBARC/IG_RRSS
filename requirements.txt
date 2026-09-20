@@ -1,4 +1,4 @@
+# Scripts de la raíz (upload_draft.py, pick_urls.py) y generador de carruseles.
 requests
 pyyaml
-# Solo para scripts/prepare.py (conversión local PNG -> JPG):
 pillow

@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(echo \"código de salida del workflow: $?\")",
+      "Bash(curl -s -o /dev/null -m 30 -A \"Mozilla/5.0\" -w \"  HTTP %{http_code}\\\\n\" https://www.instagram.com/p/DdhIWFmneVZ/)",
+      "Bash(curl -s -o /dev/null -m 60 -w \"  HTTP %{http_code}\\\\n\" https://ig-rrss.onrender.com/media/ae71b9a603444f1b80f1da5540ed620a/0.jpg)"
+    ]
+  }
+}

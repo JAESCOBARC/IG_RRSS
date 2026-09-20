@@ -5,7 +5,7 @@ sin overflow) y los guarda como JPG, el único formato que admite la API de
 Instagram. No necesita rsvg ni fuentes del sistema: usa las de assets/fonts.
 
 Uso:
-    python carousel_gen.py slides.json queue/AAAA-MM-DD-tema
+    python carousel_gen.py slides.json /tmp/post
 
 Genera slide-01.jpg, slide-02.jpg... en la carpeta de salida.
 

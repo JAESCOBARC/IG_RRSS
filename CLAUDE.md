@@ -61,9 +61,5 @@ termina subiendo el borrador y dándole al usuario el enlace del panel.
 ## Estado y datos fijos
 - Cuenta de Instagram: **trabajoenexcel** (ID de cuenta `17841443221425746`, no
   es secreto). App de Meta: «Carruseles y Post».
-- **Sistema anterior (a retirar tras verificar la app en producción):**
-  `queue/`, `scripts/publish.py`, `scripts/prepare.py` y los workflows
-  `publish.yml` / `refresh-token.yml` publicaban desde GitHub Actions. Quedan
-  hasta confirmar que la app funciona; no usarlos para posts nuevos.
 - Pendiente conocido: un token anterior quedó visible en el commit `7dc2497`
   (por haber cruzado los secrets). Sin revocar por decisión del usuario.
