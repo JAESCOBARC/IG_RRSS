@@ -25,7 +25,10 @@ JPG en el historial aunque se borren.
 ## Crear posts
 Usa la skill **`carruseles-app`** (`.claude/skills/carruseles-app/`) siempre que
 se pida un carrusel o un post. Las URLs a promocionar están en `url.txt`; los
-ángulos verificados de cada una, en `references/urls.md` de la skill. La skill
+ángulos verificados de cada una, en `references/urls.md` de la skill.
+**Cada lunes** una rutina programada de Claude en la nube genera la **tanda semanal**
+(3 borradores, uno por URL, sin repetir temas recientes; ver «Tanda semanal» en la
+skill). El usuario aprueba los 2 mejores antes de los huecos del martes y el jueves. La skill
 termina subiendo el borrador y dándole al usuario el enlace del panel.
 
 ## Reglas

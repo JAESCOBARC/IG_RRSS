@@ -154,6 +154,15 @@ class ApiTests(Base):
         with db.connect() as conn:
             self.assertEqual(db.one(conn, "SELECT COUNT(*) AS n FROM posts")["n"], 0)
 
+    def test_listado_reciente_exige_api_key_y_no_expone_texto(self):
+        self.draft(title="Primero")
+        self.draft(title="Segundo")
+        self.assertEqual(self.client.get("/api/posts").status_code, 401)
+        rows = self.client.get("/api/posts?limit=1", headers=API).get_json()
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(set(rows[0]), {"id", "title", "status", "source_url", "created_at", "published_at"})
+        self.assertEqual(self.client.get("/api/posts?limit=x", headers=API).status_code, 400)
+
     def test_limites(self):
         self.assertEqual(self.upload(caption="x" * 2300).status_code, 422)
         self.assertEqual(self.upload(hashtags=json.dumps([f"t{i}" for i in range(31)])).status_code, 422)

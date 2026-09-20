@@ -129,6 +129,27 @@ Si el post queda `failed` en el panel, el usuario ve el error. Un fallido no se
 reintenta a ciegas (podría duplicar la publicación): primero se comprueba en el
 perfil de Instagram si llegó a publicarse.
 
+## Tanda semanal (los lunes)
+
+Cuando se pida «la tanda semanal», «los 3 posts de la semana», o la ejecute la
+rutina programada de los lunes, genera **3 carruseles** siguiendo el flujo 1-7 para
+cada uno, más estas reglas:
+
+1. **Contexto:** ejecuta `python scripts/upload_draft.py --recent` para ver los posts
+   de las últimas semanas (título y URL). Necesita `IG_APP_URL` e `IG_APP_API_KEY`.
+2. **Uno por URL de `url.txt`** (3 URLs = 3 posts). Si `url.txt` cambia de tamaño,
+   reparte igualmente hasta llegar a 3, sin repetir URL dentro de la tanda si puedes.
+3. **Ángulos distintos:** entre los 3 de la tanda y respecto a los recientes: no
+   repitas el mismo dolor, gancho ni ejemplo de las últimas 3-4 semanas. Varía el
+   objetivo (alcance / conexión / venta) entre los 3.
+4. **Cada post en su propia carpeta temporal** (`<tmp>/post1`, `post2`, `post3`), con
+   su revisión visual del paso 5 y las «Restricciones» de siempre.
+5. **Sube los 3 borradores.** Si el servidor rechaza uno, corrígelo y vuelve a
+   subirlo; si al final no se pueden subir los 3, dilo claramente en el resumen.
+6. **No apruebes ni publiques nada.** Termina con un resumen corto: los 3 títulos con
+   su enlace del panel, y el recordatorio de que hay 2 huecos por semana (martes
+   15:30 y jueves 19:00): que aprueben los 2 mejores antes de la hora.
+
 ## Referencias
 - `references/urls.md` — dolor, keyword y CTA reales de las 3 URLs. Léelo
   siempre en el paso 2, no lo repitas de memoria de conversaciones pasadas.

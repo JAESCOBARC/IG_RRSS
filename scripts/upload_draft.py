@@ -3,6 +3,7 @@
 
 Uso:
   python scripts/upload_draft.py CARPETA [--spec spec.json] [--keep]
+  python scripts/upload_draft.py --recent      # lista los posts recientes (para no repetir temas)
 
 CARPETA contiene slide-01.jpg, slide-02.jpg... y meta.yaml con:
   title, caption, hashtags (lista sin #) y, opcional, source_url.
@@ -51,7 +52,8 @@ def slides_text(spec_path: Path) -> list[str]:
 def main() -> int:
     sys.stdout.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(description="Sube un borrador a la app de aprobación")
-    parser.add_argument("folder", type=Path)
+    parser.add_argument("folder", type=Path, nargs="?")
+    parser.add_argument("--recent", action="store_true", help="listar los posts recientes y salir")
     parser.add_argument("--spec", type=Path, help="JSON de las slides (para mostrar su texto)")
     parser.add_argument("--keep", action="store_true", help="no borrar las imágenes locales tras subir")
     args = parser.parse_args()
@@ -61,6 +63,18 @@ def main() -> int:
     if not base or not key:
         print("Faltan IG_APP_URL / IG_APP_API_KEY (variables de entorno o .env).", file=sys.stderr)
         return 2
+
+    if args.recent:
+        resp = requests.get(f"{base}/api/posts", headers={"Authorization": f"Bearer {key}"},
+                            params={"limit": 40}, timeout=120)
+        if resp.status_code != 200:
+            print(f"[FALLO] {resp.status_code}: {resp.text[:200]}", file=sys.stderr)
+            return 1
+        for post in resp.json():
+            print(f"{post['created_at'][:10]}  {post['status']:<10}  {post['title']}  |  {post.get('source_url') or ''}")
+        return 0
+    if not args.folder:
+        parser.error("indica CARPETA o usa --recent")
 
     images = sorted(args.folder.glob("slide-*.jpg"))
     meta_path = args.folder / "meta.yaml"

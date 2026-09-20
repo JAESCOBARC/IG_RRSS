@@ -544,6 +544,21 @@ def api_create_draft():
     return jsonify(id=pid, url=url_for("post_page", pid=pid, _external=True)), 201
 
 
+@app.get("/api/posts")
+@api_key_required
+def api_list_posts():
+    """Posts recientes (sin imágenes ni texto): sirve para no repetir temas al generar."""
+    try:
+        limit = max(1, min(int(request.args.get("limit", 30)), 100))
+    except ValueError:
+        return _bad("limit debe ser un número", 400)
+    with db.connect() as conn:
+        rows = db.query(conn, (
+            "SELECT id, title, status, source_url, created_at, published_at FROM posts "
+            "ORDER BY created_at DESC LIMIT %s"), (limit,))
+    return jsonify(rows)
+
+
 @app.get("/api/posts/<pid>")
 @api_key_required
 def api_post_status(pid):
