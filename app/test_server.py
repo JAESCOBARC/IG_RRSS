@@ -77,6 +77,9 @@ class Base(unittest.TestCase):
             db.execute(conn, "DELETE FROM images")
             db.execute(conn, "DELETE FROM posts")
             db.execute(conn, "DELETE FROM kv")
+            db.execute(conn, "DELETE FROM users")
+            db.execute(conn, "DELETE FROM schedule_slots")
+        server._attempts.clear()  # el límite de intentos de login es global: que no pase de una prueba a otra
         self.client = server.app.test_client()
         self._publish, self._refresh, self._utcnow = instagram.publish, instagram.refresh, server.utcnow
         self._schedule_file = schedule.SCHEDULE_FILE  # el de verdad (app/schedule.txt)
@@ -102,7 +105,7 @@ class Base(unittest.TestCase):
         client.get("/login")
         with client.session_transaction() as s:
             token = s["csrf"]
-        return client.post("/login", data={"password": "clave-de-prueba", "csrf": token})
+        return client.post("/login", data={"username": "admin", "password": "clave-de-prueba", "csrf": token})
 
     def csrf(self, client=None):
         """Token CSRF vigente: se genera al pintar cualquier página."""
@@ -238,21 +241,21 @@ class AccessTests(Base):
         c.get("/login")
         with c.session_transaction() as s:
             token = s["csrf"]
-        r = c.post("/login", data={"password": "mala", "csrf": token})
+        r = c.post("/login", data={"username": "admin", "password": "mala", "csrf": token})
         self.assertEqual(r.status_code, 200)
         self.assertEqual(c.get("/").status_code, 302)
         self.assertEqual(self.login(c).status_code, 302)
         self.assertEqual(c.get("/").status_code, 200)
 
     def test_login_sin_csrf_400(self):
-        self.assertEqual(self.client.post("/login", data={"password": "clave-de-prueba"}).status_code, 400)
+        self.assertEqual(self.client.post("/login", data={"username": "admin", "password": "clave-de-prueba"}).status_code, 400)
 
     def test_redireccion_next_solo_relativa(self):
         c = server.app.test_client()
         c.get("/login")
         with c.session_transaction() as s:
             token = s["csrf"]
-        r = c.post("/login?next=//evil.com", data={"password": "clave-de-prueba", "csrf": token})
+        r = c.post("/login?next=//evil.com", data={"username": "admin", "password": "clave-de-prueba", "csrf": token})
         self.assertEqual(r.headers["Location"], "/")
 
     def test_media_visible_con_sesion(self):
@@ -600,11 +603,9 @@ class KindQueueTests(Base):
         page = self.client.get(f"/post/{his}").get_data(as_text=True)
         self.assertIn("no llevan texto de publicación", page)
         # un tipo aprobado sin hueco definido se avisa
-        only = os.path.join(_TMP, "sin_historias.txt")
-        with open(only, "w", encoding="utf-8") as f:
-            f.write("martes 15:30 carrusel\n")
-        schedule.SCHEDULE_FILE = only
-        self.assertIn("sin ningún hueco en schedule.txt", self.client.get("/").get_data(as_text=True))
+        with db.connect() as conn:
+            db.execute(conn, "DELETE FROM schedule_slots WHERE kind = 'historia'")
+        self.assertIn("sin ningún hueco en la programación", self.client.get("/").get_data(as_text=True))
 
     def test_migracion_de_una_base_sin_columna_kind(self):
         old = os.path.join(_TMP, "vieja.db")
@@ -626,6 +627,242 @@ class KindQueueTests(Base):
                 self.assertEqual(db.one(conn, "SELECT kind FROM posts WHERE id = 'x'")["kind"], "carrusel")
         finally:
             db.SQLITE_PATH = previous
+
+
+class UserTests(Base):
+    """Varios usuarios: alta, baja, roles y acceso."""
+
+    def post(self, client, path, **data):
+        client.get("/login")
+        with client.session_transaction() as s:
+            token = s["csrf"]
+        return client.post(path, data={"csrf": token, **data})
+
+    def as_admin(self):
+        self.login()
+        return self.client
+
+    def create(self, name="ana", password="clave-larga-1", role="editor"):
+        r = self.post(self.as_admin(), "/admin/users", username=name, password=password, role=role)
+        self.assertEqual(r.status_code, 302)
+        with db.connect() as conn:
+            return db.one(conn, "SELECT * FROM users WHERE username = %s", (name.lower(),))
+
+    def login_as(self, name, password="clave-larga-1"):
+        c = server.app.test_client()
+        r = self.post(c, "/login", username=name, password=password)
+        return c, r
+
+    def test_crear_usuario_y_entrar(self):
+        row = self.create("Ana")  # el nombre se guarda en minúsculas
+        self.assertEqual(row["username"], "ana")
+        self.assertNotIn("clave-larga-1", row["password_hash"])  # cifrada, nunca en claro
+        c, r = self.login_as("ANA")
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(c.get("/").status_code, 200)
+
+    def test_credenciales_incorrectas(self):
+        self.create("ana")
+        for user, pw in (("ana", "otra-clave-x"), ("nadie", "clave-larga-1"), ("ana", "")):
+            c, r = self.login_as(user, pw)
+            self.assertEqual(r.status_code, 200, (user, pw))
+            self.assertEqual(c.get("/").status_code, 302)
+
+    def test_eliminar_usuario_le_quita_el_acceso_al_instante(self):
+        row = self.create("ana")
+        c, _ = self.login_as("ana")
+        self.assertEqual(c.get("/").status_code, 200)
+        r = self.post(self.client, f"/admin/users/{row['id']}/delete")
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(c.get("/").status_code, 302)  # su sesión ya no vale
+        c2, _ = self.login_as("ana")
+        self.assertEqual(c2.get("/").status_code, 302)  # ni puede volver a entrar
+
+    def test_no_se_puede_eliminar_la_propia_cuenta(self):
+        row = self.create("ana", role="admin")
+        c, _ = self.login_as("ana")
+        self.post(c, f"/admin/users/{row['id']}/delete")
+        self.assertEqual(c.get("/admin/users").status_code, 200)
+
+    def test_editor_no_gestiona_usuarios_ni_programacion(self):
+        self.create("ana", role="editor")
+        c, _ = self.login_as("ana")
+        for path in ("/admin/users", "/admin/schedule"):
+            self.assertEqual(c.get(path).status_code, 403, path)
+        self.assertEqual(self.post(c, "/admin/users", username="otro", password="clave-larga-1", role="admin").status_code, 403)
+        self.assertEqual(self.post(c, "/admin/schedule/slots", day="0", time="10:00", kind="carrusel").status_code, 403)
+        html = c.get("/").get_data(as_text=True)
+        self.assertNotIn("/admin/users", html)
+        self.assertEqual(c.get("/").status_code, 200)  # pero sí puede usar el panel
+
+    def test_admin_de_la_base_de_datos_gestiona_usuarios(self):
+        self.create("jefe", role="admin")
+        c, _ = self.login_as("jefe")
+        self.assertEqual(c.get("/admin/users").status_code, 200)
+        self.assertEqual(c.get("/admin/schedule").status_code, 200)
+
+    def test_validaciones_de_alta(self):
+        admin = self.as_admin()
+        for name, pw, role in (("ab", "clave-larga-1", "editor"), ("con espacio", "clave-larga-1", "editor"),
+                               ("admin", "clave-larga-1", "editor"), ("ana", "corta", "editor"),
+                               ("ana", "clave-larga-1", "superhéroe")):
+            self.post(admin, "/admin/users", username=name, password=pw, role=role)
+        with db.connect() as conn:
+            self.assertEqual(db.query(conn, "SELECT * FROM users"), [])
+        self.create("ana")
+        self.post(admin, "/admin/users", username="ANA", password="otra-clave-larga", role="editor")
+        with db.connect() as conn:
+            self.assertEqual(len(db.query(conn, "SELECT * FROM users")), 1)  # sin duplicados
+
+    def test_cambiar_contrasena_propia(self):
+        self.create("ana")
+        c, _ = self.login_as("ana")
+        r = self.post(c, "/account", current_password="incorrecta", new_password="nueva-clave-99", again="nueva-clave-99")
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(self.login_as("ana", "nueva-clave-99")[0].get("/").status_code, 302)  # no cambió
+        self.post(c, "/account", current_password="clave-larga-1", new_password="nueva-clave-99", again="distinta-99999")
+        self.assertEqual(self.login_as("ana", "nueva-clave-99")[0].get("/").status_code, 302)
+        self.post(c, "/account", current_password="clave-larga-1", new_password="nueva-clave-99", again="nueva-clave-99")
+        self.assertEqual(self.login_as("ana", "nueva-clave-99")[0].get("/").status_code, 200)
+        self.assertEqual(self.login_as("ana", "clave-larga-1")[0].get("/").status_code, 302)
+
+    def test_cuenta_integrada_no_cambia_contrasena_desde_el_panel(self):
+        self.login()
+        self.assertIn("ADMIN_PASSWORD", self.client.get("/account").get_data(as_text=True))
+
+    def test_usuarios_sin_csrf_400(self):
+        self.login()
+        self.assertEqual(self.client.post("/admin/users", data={"username": "ana"}).status_code, 400)
+        self.assertEqual(self.client.post("/admin/schedule/slots", data={}).status_code, 400)
+
+    def test_sesion_antigua_sin_usuario_no_vale(self):
+        with self.client.session_transaction() as s:
+            s["auth"] = True  # formato de sesión anterior a los usuarios
+        self.assertEqual(self.client.get("/").status_code, 302)
+
+    def test_quien_aprueba_queda_registrado(self):
+        self.create("ana")
+        pid = self.draft()
+        c, _ = self.login_as("ana")
+        c.get("/")
+        with c.session_transaction() as s:
+            token = s["csrf"]
+        c.post(f"/post/{pid}/approve", data={"csrf": token, "confirm": "on"})
+        self.assertEqual(self.status(pid)["status"], "approved")
+        with db.connect() as conn:
+            self.assertEqual(db.one(conn, "SELECT approved_by FROM posts WHERE id = %s", (pid,))["approved_by"], "ana")
+        self.assertIn("Aprobado por ana", c.get(f"/post/{pid}").get_data(as_text=True))
+
+
+class ScheduleAdminTests(Base):
+    """Huecos de publicación editables desde el panel."""
+
+    def setUp(self):
+        super().setUp()
+        schedule.SCHEDULE_FILE = self._schedule_file  # el de verdad: sirve de programación inicial
+
+    def slots(self):
+        with db.connect() as conn:
+            return [(r["weekday"], r["slot_time"], r["kind"]) for r in db.query(
+                conn, "SELECT * FROM schedule_slots ORDER BY weekday, slot_time, kind")]
+
+    def act(self, path, **data):
+        self.login()
+        return self.client.post(path, data={"csrf": self.csrf(), **data})
+
+    def test_primera_carga_copia_schedule_txt(self):
+        self.login()
+        html = self.client.get("/admin/schedule").get_data(as_text=True)
+        self.assertEqual(self.slots(), [(1, "15:30", "carrusel"), (3, "19:00", "historia"), (3, "19:00", "publicacion")])
+        for text in ("Martes", "15:30", "Jueves", "19:00", "Europe/Madrid"):
+            self.assertIn(text, html)
+
+    def test_manda_la_base_de_datos_no_el_archivo(self):
+        self.login()
+        self.client.get("/admin/schedule")
+        bad = os.path.join(_TMP, "ignorado.txt")
+        with open(bad, "w", encoding="utf-8") as f:
+            f.write("esto ni es un horario\n")
+        schedule.SCHEDULE_FILE = bad
+        self.assertEqual(self.client.get("/admin/schedule").status_code, 200)
+        self.assertEqual(self.tick(MON).get_json()["action"], "idle")
+
+    def test_anadir_y_eliminar_hueco(self):
+        self.act("/admin/schedule/slots", day="4", time="9:05", kind="carrusel")
+        self.assertIn((4, "09:05", "carrusel"), self.slots())
+        self.act("/admin/schedule/slots", day="4", time="09:05", kind="carrusel")  # duplicado
+        self.assertEqual(self.slots().count((4, "09:05", "carrusel")), 1)
+        with db.connect() as conn:
+            sid = db.one(conn, "SELECT id FROM schedule_slots WHERE weekday = 4")["id"]
+        self.act(f"/admin/schedule/slots/{sid}/delete")
+        self.assertNotIn((4, "09:05", "carrusel"), self.slots())
+
+    def test_rechaza_huecos_no_validos(self):
+        self.login()
+        self.client.get("/admin/schedule")  # carga inicial
+        before = self.slots()
+        self.assertEqual(len(before), 3)
+        for day, time_, kind in (("9", "10:00", "carrusel"), ("x", "10:00", "carrusel"), ("1", "25:00", "carrusel"),
+                                 ("1", "10:99", "carrusel"), ("1", "", "carrusel"), ("1", "10:00", "reel")):
+            self.act("/admin/schedule/slots", day=day, time=time_, kind=kind)
+        self.assertEqual(self.slots(), before)
+
+    def test_el_hueco_nuevo_publica_en_el_tick(self):
+        pid = self.draft("carrusel")
+        self.approve(pid)
+        self.act("/admin/schedule/slots", day="2", time="12:00", kind="carrusel")  # miércoles 12:00
+        instagram.publish = lambda urls, caption, user_id, token, **kw: {
+            "media_id": "1", "permalink": "https://www.instagram.com/p/A/"}
+        # creado a las 10:05 UTC, cuando las 12:00 de Madrid (10:00 UTC) ya habían pasado: no cuenta
+        with db.connect() as conn:
+            db.execute(conn, "UPDATE schedule_slots SET created_at = '2026-09-23T10:05:00+00:00' WHERE weekday = 2")
+        self.assertEqual(self.tick("2026-09-23T10:10:00+00:00").get_json()["action"], "idle")
+        with db.connect() as conn:
+            db.execute(conn, "UPDATE schedule_slots SET created_at = '2026-09-22T09:00:00+00:00' WHERE weekday = 2")
+        r = self.tick("2026-09-23T10:10:00+00:00").get_json()  # creado el día anterior: sí
+        self.assertEqual(r["action"], "publishing")
+        self.assertEqual(r["posts"][0]["kind"], "carrusel")
+
+    def test_hueco_recien_creado_no_publica_una_hora_pasada(self):
+        cfg = schedule.build("Europe/Madrid", 120, [
+            {"weekday": 1, "slot_time": "15:30", "kind": "carrusel", "created_at": "2026-09-22T13:40:00+00:00"}])
+        self.assertEqual(cfg.due_slots(at(TUE_LATER)), {})  # las 15:30 ya pasaron cuando se creó el hueco
+        self.assertEqual(cfg.upcoming(at(TUE_LATER), None, 1, "carrusel"), [at("2026-09-29T13:30:00+00:00")])
+
+    def test_eliminar_un_hueco_deja_de_publicar_ahi(self):
+        pid = self.draft("carrusel")
+        self.approve(pid)
+        with db.connect() as conn:
+            sid = db.one(conn, "SELECT id FROM schedule_slots WHERE kind = 'carrusel'")["id"]
+        self.act(f"/admin/schedule/slots/{sid}/delete")
+        self.assertEqual(self.tick(TUE_SLOT).get_json()["action"], "idle")
+        self.assertIn("sin ningún hueco en la programación", self.client.get("/").get_data(as_text=True))
+
+    def test_sin_ningun_hueco_no_falla(self):
+        with db.connect() as conn:
+            db.execute(conn, "DELETE FROM schedule_slots")
+            db.kv_set(conn, "schedule_seeded", db.now())
+            db.kv_set(conn, "schedule_tz", "Europe/Madrid")
+            db.kv_set(conn, "schedule_tolerance", "120")
+        self.login()
+        self.assertIn("No hay ningún hueco", self.client.get("/admin/schedule").get_data(as_text=True))
+        self.assertEqual(self.tick(TUE_SLOT).get_json()["action"], "idle")
+        self.assertEqual(self.client.get("/").status_code, 200)
+        self.assertEqual(self.slots(), [])  # no se vuelve a copiar schedule.txt
+
+    def test_ajustes_zona_y_tolerancia(self):
+        self.act("/admin/schedule/settings", tz="America/Bogota", tolerance="60")
+        with db.connect() as conn:
+            self.assertEqual(db.kv_get(conn, "schedule_tz"), "America/Bogota")
+            self.assertEqual(db.kv_get(conn, "schedule_tolerance"), "60")
+        # 15:30 en Bogotá (UTC-5) = 20:30 UTC
+        self.assertEqual(self.tick("2026-09-22T13:30:00+00:00").get_json()["action"], "idle")  # ya no es la hora
+        self.assertEqual(self.tick("2026-09-22T20:30:00+00:00").get_json()["action"], "empty-queue")
+        for tz, tol in (("Marte/Olimpo", "60"), ("Europe/Madrid", "5"), ("Europe/Madrid", "99999"), ("Europe/Madrid", "abc")):
+            self.act("/admin/schedule/settings", tz=tz, tolerance=tol)
+        with db.connect() as conn:
+            self.assertEqual(db.kv_get(conn, "schedule_tz"), "America/Bogota")
+            self.assertEqual(db.kv_get(conn, "schedule_tolerance"), "60")
 
 
 class TokenTests(Base):

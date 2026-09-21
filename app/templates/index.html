@@ -31,10 +31,10 @@
 ] %}
 
 {% if queue.schedule_error %}
-<div class="flash error">La programación (schedule.txt) no es válida y no se publicará nada: {{ queue.schedule_error }}</div>
+<div class="flash error">La programación no es válida y no se publicará nada: {{ queue.schedule_error }}</div>
 {% elif queue.no_slot %}
 <div class="flash error">
-  Hay posts aprobados de tipo {{ queue.no_slot | map('title') | join(', ') }} sin ningún hueco en schedule.txt: no se publicarán hasta que añadas uno.
+  Hay posts aprobados de tipo {{ queue.no_slot | map('title') | join(', ') }} sin ningún hueco en la programación: no se publicarán hasta que añadas uno{% if current_user().role == 'admin' %} (<a href="{{ url_for('schedule_page') }}">ir a Programación</a>){% endif %}.
 </div>
 {% elif groups.approved and queue.tick_stale %}
 <div class="flash error">

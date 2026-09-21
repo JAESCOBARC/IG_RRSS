@@ -1,6 +1,8 @@
-"""Huecos de publicación, leídos de schedule.txt (formato explicado en ese archivo).
+"""Huecos de publicación. Cada hueco es «día HH:MM tipo» y en cada uno se publica UN post de ese tipo.
 
-Cada hueco es «día HH:MM tipo». En cada hueco se publica UN post de ese tipo.
+La programación vigente vive en la base de datos y se edita desde el panel (schedule_store.py).
+schedule.txt (formato explicado en ese archivo) solo es la programación inicial: se copia a la
+base de datos la primera vez que arranca la app.
 """
 import datetime as dt
 import os
@@ -10,6 +12,8 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 SCHEDULE_FILE = os.environ.get("SCHEDULE_FILE", str(Path(__file__).with_name("schedule.txt")))
 UTC = dt.timezone.utc
+EPOCH = dt.datetime(1970, 1, 1, tzinfo=UTC)
+MIN_TOLERANCE, MAX_TOLERANCE = 30, 720  # minutos; el programador avisa cada 30
 
 KINDS = ("carrusel", "publicacion", "historia")
 KIND_ALIASES = {"carrusel": "carrusel", "publicacion": "publicacion", "publicación": "publicacion",
@@ -28,8 +32,11 @@ class ScheduleError(Exception):
 
 class Schedule:
     def __init__(self, tz: ZoneInfo, tz_name: str, tolerance: dt.timedelta,
-                 slots: list[tuple[int, dt.time, str]]):
+                 slots: list[tuple[int, dt.time, str]],
+                 since: dict[tuple[int, dt.time, str], dt.datetime] | None = None):
         self.tz, self.tz_name, self.tolerance, self.slots = tz, tz_name, tolerance, slots
+        # desde cuándo vale cada hueco: uno recién creado no publica a posteriori una hora ya pasada
+        self.since = since or {}
 
     def kinds(self) -> set[str]:
         return {kind for _, _, kind in self.slots}
@@ -43,7 +50,7 @@ class Schedule:
             for weekday, at, slot_kind in self.slots:
                 if slot_kind == kind and day.weekday() == weekday:
                     slot = dt.datetime.combine(day, at, tzinfo=self.tz).astimezone(UTC)
-                    if start <= slot <= end:
+                    if start <= slot <= end and slot >= self.since.get((weekday, at, kind), EPOCH):
                         out.append(slot)
             day += dt.timedelta(days=1)
         return sorted(out)
@@ -73,6 +80,8 @@ class Schedule:
         return f"{DAY_NAMES[local.weekday()]} {local.day} {MONTHS[local.month - 1]}, {local:%H:%M}"
 
     def describe(self) -> str:
+        if not self.slots:
+            return "ninguno"
         return ", ".join(f"{DAY_NAMES[d]} {t:%H:%M} ({KIND_LABELS[k]})" for d, t, k in sorted(self.slots))
 
 
@@ -105,11 +114,53 @@ def parse(text: str) -> Schedule:
         slots.append((DAYS[m.group(1).lower()], dt.time(hour, minute), kind))
     if not slots:
         raise ScheduleError("no hay ningún hueco definido")
+    tz = build_tz(tz_name)
+    return Schedule(tz, tz_name, tolerance, sorted(set(slots)))
+
+
+def build_tz(tz_name: str) -> ZoneInfo:
     try:
-        tz = ZoneInfo(tz_name)
+        return ZoneInfo(tz_name)
     except (ZoneInfoNotFoundError, ValueError):
         raise ScheduleError(f"zona horaria desconocida: {tz_name}")
-    return Schedule(tz, tz_name, tolerance, sorted(set(slots)))
+
+
+def check_tolerance(minutes) -> int:
+    if not isinstance(minutes, int) or not MIN_TOLERANCE <= minutes <= MAX_TOLERANCE:
+        raise ScheduleError(f"la tolerancia debe ser un número de minutos entre {MIN_TOLERANCE} y {MAX_TOLERANCE}")
+    return minutes
+
+
+def parse_day(text) -> int:
+    text = str(text).strip().lower()
+    day = int(text) if text.isdigit() else DAYS.get(text)
+    if day is None or not 0 <= day <= 6:
+        raise ScheduleError("día no válido")
+    return day
+
+
+def parse_time(text: str) -> dt.time:
+    m = re.fullmatch(r"(\d{1,2}):(\d{2})", (text or "").strip())
+    if not m or int(m.group(1)) > 23 or int(m.group(2)) > 59:
+        raise ScheduleError("hora no válida (usa HH:MM)")
+    return dt.time(int(m.group(1)), int(m.group(2)))
+
+
+def parse_kind(text: str) -> str:
+    kind = KIND_ALIASES.get((text or "").strip().lower())
+    if not kind:
+        raise ScheduleError("tipo no válido (carrusel, publicación o historia)")
+    return kind
+
+
+def build(tz_name: str, tolerance_minutes: int, rows: list[dict]) -> Schedule:
+    """Programación a partir de filas de la base de datos (puede no tener ningún hueco)."""
+    slots, since = [], {}
+    for r in rows:
+        key = (r["weekday"], parse_time(r["slot_time"]), r["kind"])
+        slots.append(key)
+        since[key] = dt.datetime.fromisoformat(r["created_at"])
+    return Schedule(build_tz(tz_name), tz_name, dt.timedelta(minutes=tolerance_minutes), sorted(set(slots)), since)
 
 
 def load(path: str | None = None) -> Schedule:

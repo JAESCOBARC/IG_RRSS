@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Usuarios{% endblock %}
+{% block content %}
+<p><a class="back" href="{{ url_for('index') }}">← Volver</a></p>
+<h1>Usuarios</h1>
+<p class="muted">Quien tenga una cuenta puede entrar al panel y aprobar o rechazar posts. Los <strong>administradores</strong> además gestionan los usuarios y la programación.</p>
+
+<section class="card">
+  <h2>Con acceso</h2>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>Usuario</th><th>Rol</th><th>Creado</th><th><span class="sr">Acciones</span></th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>admin</strong>{% if user.builtin %} <span class="muted">(tú)</span>{% endif %}</td>
+        <td>{{ roles['admin'] }}</td>
+        <td class="muted">Cuenta integrada</td>
+        <td class="muted small">No se puede eliminar</td>
+      </tr>
+      {% for u in users %}
+      <tr>
+        <td><strong>{{ u.username }}</strong>{% if u.id == user.id %} <span class="muted">(tú)</span>{% endif %}</td>
+        <td>{{ roles[u.role] }}</td>
+        <td class="muted">{{ u.created_at | fmt }}{% if u.created_by %}<br><span class="small">por {{ u.created_by }}</span>{% endif %}</td>
+        <td>
+          {% if u.id != user.id %}
+          <form method="post" action="{{ url_for('users_delete', uid=u.id) }}">
+            <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+            <button class="btn small danger" type="submit">Eliminar</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% if not users %}<p class="muted">Todavía no has creado ningún usuario.</p>{% endif %}
+</section>
+
+<section class="card">
+  <h2>Crear usuario</h2>
+  <form method="post" action="{{ url_for('users_create') }}" class="stack">
+    <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+    <label for="username">Usuario <span class="muted">(3-32 caracteres: letras, números, . _ -)</span></label>
+    <input id="username" name="username" type="text" autocomplete="off" autocapitalize="none" spellcheck="false" minlength="3" maxlength="32" required>
+    <label for="password">Contraseña inicial <span class="muted">(mínimo {{ min_password }} caracteres)</span></label>
+    <input id="password" name="password" type="password" autocomplete="new-password" minlength="{{ min_password }}" required>
+    <label for="role">Rol</label>
+    <select id="role" name="role">
+      <option value="editor">{{ roles['editor'] }}: aprueba y rechaza posts</option>
+      <option value="admin">{{ roles['admin'] }}: además, usuarios y programación</option>
+    </select>
+    <button class="btn primary" type="submit">Crear usuario</button>
+  </form>
+  <p class="muted small">Eliminar un usuario le quita el acceso al instante. Cada persona puede cambiar su contraseña en su cuenta.</p>
+</section>
+{% endblock %}

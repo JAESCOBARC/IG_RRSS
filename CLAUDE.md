@@ -10,10 +10,10 @@ allí, se publican en Instagram. Repo: `JAESCOBARC/IG_RRSS` (**público**).
    skill `carruseles-app` (`--format carrusel|publicacion|historia`) y ejecuta
    `scripts/upload_draft.py`.
 2. La app (`app/`, Flask, desplegada en Render; blueprint en `render.yaml`) guarda
-   el borrador en Postgres (Neon) y lo muestra en un panel con contraseña: slides,
+   el borrador en Postgres (Neon) y lo muestra en un panel con usuarios y contraseña: slides,
    caption y hashtags, con botones «Aprobar y poner en cola» / «Rechazar».
 3. Al aprobar, el post pasa a la **cola**. Un workflow (`tick.yml`) avisa a la app
-   cada 30 min y, en cada hueco de `app/schedule.txt` —cada hueco es «día hora tipo»:
+   cada 30 min y, en cada hueco de la programación del panel (`app/schedule.txt` es solo la inicial) —cada hueco es «día hora tipo»:
    carrusel el martes 15:30; publicación e historia el jueves 19:00, hora de España
    peninsular—, **la app publica el post más antiguo de la cola de ese tipo**
    (sirviendo ella misma las imágenes por una URL pública, solo mientras dura la
@@ -46,7 +46,9 @@ termina subiendo el borrador y dándole al usuario el enlace del panel.
 - **Claude no publica ni aprueba:** publicar es una acción sobre una cuenta real y
   la autoriza el usuario en el panel. Claude solo sube borradores. Tampoco lanza el
   workflow con «forzar» (publica fuera de hueco, y admite elegir el tipo): es solo una prueba manual del usuario.
-- **Horarios:** solo los de `app/schedule.txt`. Para cambiarlos se edita ese archivo.
+- **Horarios:** solo los de la programación de la app, que edita el usuario (administrador) en el panel
+  (**Programación**). `app/schedule.txt` solo se lee la primera vez, para sembrar la base de datos. Claude
+  no cambia horarios ni usuarios.
 - **Un post `failed` no se reintenta a ciegas**: puede haberse publicado ya.
   Se comprueba el perfil antes de reabrirlo.
 - **No se guardan imágenes:** ni en el repo, ni en el servidor tras publicar, ni en
@@ -68,6 +70,8 @@ termina subiendo el borrador y dándole al usuario el enlace del panel.
 - Guía de despliegue, programación y pruebas en producción: `app/README.md`.
 
 ## Estado y datos fijos
+- **Bitácora de la versión actual:** [`STATUS.md`](STATUS.md) (qué está verificado, qué no, decisiones
+  y cambios). Actualizarla tras cada cambio relevante o prueba en producción.
 - Cuenta de Instagram: **trabajoenexcel** (ID de cuenta `17841443221425746`, no
   es secreto). App de Meta: «Carruseles y Post».
 - Pendiente conocido: un token anterior quedó visible en el commit `7dc2497`

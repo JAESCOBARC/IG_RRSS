@@ -125,3 +125,27 @@ summary { cursor: pointer; font-weight: 600; }
 .slides.kind-historia figure { flex: 0 0 min(56vw, 240px); }
 .slides.kind-historia img { aspect-ratio: 9 / 16; }
 .slides.kind-publicacion figure { flex: 0 0 min(86vw, 360px); }
+
+/* usuarios y programación */
+.nav { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; justify-content: flex-end; }
+.nav a { text-decoration: none; font-weight: 600; }
+.nav form { margin: 0; }
+input[type=text], input[type=number], input[type=time], select {
+  width: 100%; padding: 12px; font: inherit; border: 1px solid var(--line);
+  border-radius: 8px; background: #fff; color: var(--ink);
+}
+.stack { display: grid; gap: 2px; }
+.stack .btn { margin-top: 14px; justify-self: start; }
+.row { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
+.row > div { flex: 1 1 130px; }
+.row .btn { flex: none; }
+.row label { margin-top: 0; }
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+th { font-size: .8rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+td form { margin: 0; }
+.btn.small { min-height: 36px; padding: 6px 12px; font-size: .9rem; }
+.btn.danger { color: var(--danger); border-color: #E3B8AE; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+code { background: #E8E2CF; padding: 1px 5px; border-radius: 4px; }

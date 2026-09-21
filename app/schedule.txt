@@ -1,4 +1,8 @@
-# Programación de publicaciones
+# Programación INICIAL de publicaciones
+#
+# OJO: este archivo solo se lee la primera vez que arranca la app, para copiar estos huecos a la
+# base de datos. Después, los horarios se cambian en el panel (Programación) y editar este
+# archivo ya no tiene ningún efecto.
 #
 # Cada línea es un hueco:  día HH:MM tipo
 #
@@ -11,9 +15,8 @@
 #
 # Las horas son de la zona indicada abajo (con cambio de hora verano/invierno automático).
 #
-# Para cambiar la programación: edita este archivo y súbelo a GitHub (git push);
-# Render se vuelve a desplegar solo. Un aviso del programador llega cada 30 minutos,
-# así que un post sale como mucho unos 30 min después de la hora indicada.
+# Un aviso del programador llega cada 30 minutos, así que un post sale como mucho
+# unos 30 min después de la hora indicada.
 
 zona: Europe/Madrid
 

@@ -2,9 +2,10 @@
 
 Flujo: Claude sube un borrador (POST /api/drafts) -> el usuario lo revisa en el panel y
 lo aprueba (pasa a la cola) -> un aviso periódico (POST /api/cron/tick, desde GitHub
-Actions) publica el post más antiguo de la cola en cada hueco de schedule.txt, sirviendo
-el servidor las imágenes, y después BORRA los JPG. Solo se conserva el texto, el estado
-y el enlace del post.
+Actions) publica el post más antiguo de la cola en cada hueco de la programación (guardada en
+la base de datos y editable desde el panel), sirviendo el servidor las imágenes, y después
+BORRA los JPG. Solo se conserva el texto, el estado y el enlace del post. El acceso es por
+usuarios (roles «admin» y «editor»); la cuenta integrada «admin» usa ADMIN_PASSWORD.
 """
 import datetime as dt
 import hashlib
@@ -18,18 +19,20 @@ import time
 import uuid
 from functools import wraps
 
-from flask import (Flask, Response, abort, flash, jsonify, redirect, render_template,
+from flask import (Flask, Response, abort, flash, g, jsonify, redirect, render_template,
                    request, session, url_for)
 from werkzeug.middleware.proxy_fix import ProxyFix
 
+import accounts
 import db
 import guards
 import instagram
 import schedule
+import schedule_store
 from schedule import KINDS
 
 DEV = os.environ.get("APP_ENV") == "dev"
-ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")  # contraseña de la cuenta integrada «admin»
 API_KEY = os.environ.get("API_KEY", "")
 MAX_CAPTION = 2200
 MAX_SLIDES = 10
@@ -92,11 +95,47 @@ def fmt_date(value):
     return f"{value[:10]} {value[11:16]} UTC" if value else ""
 
 
+def current_user(conn=None):
+    """Usuario de la sesión, comprobado en cada petición: si se borra la cuenta, pierde el acceso
+    al momento. None si no ha iniciado sesión."""
+    if "user" not in g:
+        uid, user = session.get("uid"), None
+        if uid == accounts.ENV_ID:
+            user = accounts.env_user() if ADMIN_PASSWORD else None
+        elif uid:
+            if conn is None:
+                with db.connect() as own:
+                    user = accounts.get(own, uid)
+            else:
+                user = accounts.get(conn, uid)
+        g.user = user
+    return g.user
+
+
+app.jinja_env.globals["current_user"] = current_user
+
+
+@app.context_processor
+def inject_user():
+    return {"user": current_user()}
+
+
 def login_required(fn):
     @wraps(fn)
     def wrapper(*args, **kwargs):
-        if not session.get("auth"):
+        if not current_user():
+            session.pop("uid", None)
             return redirect(url_for("login", next=request.path))
+        return fn(*args, **kwargs)
+    return wrapper
+
+
+def admin_required(fn):
+    @wraps(fn)
+    @login_required
+    def wrapper(*args, **kwargs):
+        if current_user()["role"] != "admin":
+            abort(403, "Esta sección es solo para administradores.")
         return fn(*args, **kwargs)
     return wrapper
 
@@ -242,19 +281,23 @@ def login():
     if request.method == "POST":
         check_csrf()
         ip = request.remote_addr or "?"
+        user = None
         if _too_many_attempts(ip):
             flash("Demasiados intentos. Espera 15 minutos.", "error")
-        elif safe_eq(request.form.get("password", ""), ADMIN_PASSWORD):
-            session.clear()
-            session["auth"] = True
-            session.permanent = True
-            with db.connect() as conn:
-                maybe_refresh_token(conn)
-            target = request.args.get("next", "")
-            return redirect(target if target.startswith("/") and not target.startswith("//") else url_for("index"))
         else:
+            with db.connect() as conn:
+                user = accounts.authenticate(conn, request.form.get("username", ""),
+                                             request.form.get("password", ""), ADMIN_PASSWORD, safe_eq)
+                if user:
+                    maybe_refresh_token(conn)
+            if user:
+                session.clear()
+                session["uid"] = user["id"]
+                session.permanent = True
+                target = request.args.get("next", "")
+                return redirect(target if target.startswith("/") and not target.startswith("//") else url_for("index"))
             _attempts.setdefault(ip, []).append(time.time())
-            flash("Contraseña incorrecta.", "error")
+            flash("Usuario o contraseña incorrectos.", "error")
     return render_template("login.html")
 
 
@@ -275,7 +318,7 @@ def _queue_context(conn) -> dict:
            "tick_stale": (not last_tick) or utcnow() - dt.datetime.fromisoformat(last_tick)
            > dt.timedelta(hours=TICK_STALE_HOURS)}
     try:
-        cfg = schedule.load()
+        cfg = schedule_store.load(conn)
         for kind in KINDS:
             ids = [r["id"] for r in approved if r["kind"] == kind]
             if not ids:
@@ -336,7 +379,8 @@ def media(pid, n):
         row = db.one(conn, (
             "SELECT p.status, i.data FROM images i JOIN posts p ON p.id = i.post_id "
             "WHERE i.post_id = %s AND i.position = %s"), (pid, n))
-    if not row or (not session.get("auth") and row["status"] != "publishing"):
+        logged_in = bool(row) and row["status"] != "publishing" and bool(current_user(conn))
+    if not row or (row["status"] != "publishing" and not logged_in):
         abort(404)
     return Response(bytes(row["data"]), mimetype="image/jpeg", headers={"Cache-Control": "private, no-store"})
 
@@ -371,8 +415,9 @@ def approve(pid):
             flash("Faltan IG_USER_ID / IG_ACCESS_TOKEN en el servidor.", "error")
             return redirect(url_for("post_page", pid=pid))
         rows = db.query(conn, (
-            "UPDATE posts SET status = 'approved', approved_at = %s, updated_at = %s "
-            "WHERE id = %s AND status = 'draft' RETURNING id"), (db.now_precise(), db.now(), pid))
+            "UPDATE posts SET status = 'approved', approved_at = %s, approved_by = %s, updated_at = %s "
+            "WHERE id = %s AND status = 'draft' RETURNING id"),
+            (db.now_precise(), current_user()["username"], db.now(), pid))
         if not rows:
             flash("Este post ya no está en borrador.", "error")
         else:
@@ -387,7 +432,7 @@ def unqueue(pid):
     check_csrf()
     with db.connect() as conn:
         rows = db.query(conn, (
-            "UPDATE posts SET status = 'draft', approved_at = NULL, updated_at = %s "
+            "UPDATE posts SET status = 'draft', approved_at = NULL, approved_by = NULL, updated_at = %s "
             "WHERE id = %s AND status = 'approved' RETURNING id"), (db.now(), pid))
     flash("Sacado de la cola." if rows else "Este post ya no está en la cola.", "ok" if rows else "error")
     return redirect(url_for("post_page", pid=pid))
@@ -440,7 +485,7 @@ def api_tick():
             targets = [(only_kind, None)]
         else:
             try:
-                due = schedule.load().due_slots(utcnow())
+                due = schedule_store.load(conn).due_slots(utcnow())
             except schedule.ScheduleError as exc:
                 return jsonify(error=str(exc)), 500
             if not due:
@@ -540,6 +585,123 @@ def delete(pid):
         rows = db.query(conn, "DELETE FROM posts WHERE id = %s AND status <> 'publishing' RETURNING id", (pid,))
     flash("Post eliminado." if rows else "No se puede eliminar un post que se está publicando.", "ok" if rows else "error")
     return redirect(url_for("index"))
+
+
+# ------------------------------------------------------------ cuenta y usuarios ---
+
+@app.route("/account", methods=["GET", "POST"])
+@login_required
+def account():
+    """Cada usuario cambia su propia contraseña (la de «admin» es la variable ADMIN_PASSWORD de Render)."""
+    user = current_user()
+    if request.method == "POST" and not user.get("builtin"):
+        check_csrf()
+        new, again = request.form.get("new_password", ""), request.form.get("again", "")
+        with db.connect() as conn:
+            if not accounts.verify_password(conn, user["id"], request.form.get("current_password", "")):
+                flash("La contraseña actual no es correcta.", "error")
+            elif new != again:
+                flash("Las contraseñas nuevas no coinciden.", "error")
+            else:
+                try:
+                    accounts.set_password(conn, user["id"], new)
+                    flash("Contraseña cambiada.", "ok")
+                except accounts.AccountError as exc:
+                    flash(str(exc), "error")
+        return redirect(url_for("account"))
+    return render_template("account.html", roles=accounts.ROLES, min_password=accounts.MIN_PASSWORD)
+
+
+@app.get("/admin/users")
+@admin_required
+def users_page():
+    with db.connect() as conn:
+        users = accounts.list_all(conn)
+    return render_template("users.html", users=users, roles=accounts.ROLES, min_password=accounts.MIN_PASSWORD)
+
+
+@app.post("/admin/users")
+@admin_required
+def users_create():
+    check_csrf()
+    with db.connect() as conn:
+        try:
+            created = accounts.create(conn, request.form.get("username", ""), request.form.get("password", ""),
+                                      request.form.get("role", ""), current_user()["username"])
+            flash(f"Usuario «{created['username']}» creado. Pásale su contraseña por un canal privado.", "ok")
+        except accounts.AccountError as exc:
+            flash(str(exc), "error")
+    return redirect(url_for("users_page"))
+
+
+@app.post("/admin/users/<uid>/delete")
+@admin_required
+def users_delete(uid):
+    check_csrf()
+    if uid == current_user()["id"]:
+        flash("No puedes eliminar tu propia cuenta.", "error")
+    else:
+        with db.connect() as conn:
+            gone = accounts.get(conn, uid)
+            if gone and accounts.delete(conn, uid):
+                flash(f"Usuario «{gone['username']}» eliminado: ya no puede entrar.", "ok")
+            else:
+                flash("Ese usuario ya no existe.", "error")
+    return redirect(url_for("users_page"))
+
+
+# ------------------------------------------------------------------ programación ---
+
+@app.get("/admin/schedule")
+@admin_required
+def schedule_page():
+    with db.connect() as conn:
+        error, slots, cfg = None, [], None
+        try:
+            cfg = schedule_store.load(conn)
+            slots = schedule_store.list_slots(conn)
+        except schedule.ScheduleError as exc:
+            error = str(exc)
+    return render_template("schedule.html", slots=slots, cfg=cfg, error=error, days=schedule.DAY_NAMES,
+                           kinds=[(k, schedule.KIND_LABELS[k].capitalize()) for k in KINDS],
+                           tolerance_range=(schedule.MIN_TOLERANCE, schedule.MAX_TOLERANCE))
+
+
+@app.post("/admin/schedule/slots")
+@admin_required
+def schedule_add():
+    check_csrf()
+    with db.connect() as conn:
+        try:
+            schedule_store.add_slot(conn, request.form.get("day", ""), request.form.get("time", ""),
+                                    request.form.get("kind", ""))
+            flash("Hueco añadido. Solo cuenta a partir de ahora: no publica una hora que ya pasó hoy.", "ok")
+        except schedule.ScheduleError as exc:
+            flash(str(exc), "error")
+    return redirect(url_for("schedule_page"))
+
+
+@app.post("/admin/schedule/slots/<sid>/delete")
+@admin_required
+def schedule_delete(sid):
+    check_csrf()
+    with db.connect() as conn:
+        removed = schedule_store.delete_slot(conn, sid)
+    flash("Hueco eliminado." if removed else "Ese hueco ya no existe.", "ok" if removed else "error")
+    return redirect(url_for("schedule_page"))
+
+
+@app.post("/admin/schedule/settings")
+@admin_required
+def schedule_settings():
+    check_csrf()
+    with db.connect() as conn:
+        try:
+            schedule_store.save_settings(conn, request.form.get("tz", ""), request.form.get("tolerance", ""))
+            flash("Ajustes guardados.", "ok")
+        except schedule.ScheduleError as exc:
+            flash(str(exc), "error")
+    return redirect(url_for("schedule_page"))
 
 
 # ------------------------------------------------------------------------ API ---

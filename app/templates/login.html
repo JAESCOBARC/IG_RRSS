@@ -5,8 +5,10 @@
   <h1>Entrar</h1>
   <form method="post">
     <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+    <label for="username">Usuario</label>
+    <input id="username" name="username" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" autofocus required>
     <label for="password">Contraseña</label>
-    <input id="password" name="password" type="password" autocomplete="current-password" autofocus required>
+    <input id="password" name="password" type="password" autocomplete="current-password" required>
     <button class="btn primary" type="submit">Entrar</button>
   </form>
 </section>

@@ -2,18 +2,34 @@
 
 Panel web para revisar el contenido generado (**carruseles, publicaciones de una imagen e
 historias**), autorizarlo y publicarlo en Instagram **en los huecos que definas**
-(`schedule.txt`). Al publicar, la app **borra
+(se configuran desde el panel). Al publicar, la app **borra
 los JPG**; solo conserva el texto, el estado y el enlace del post.
 
 ```
 Claude ──(scripts/upload_draft.py)──▶ borrador ──▶ Neon (Postgres)
                                                        │
-tú ──▶ panel (contraseña) ──▶ «Aprobar y poner en cola» │
+tú y tu equipo ──▶ panel (usuario y contraseña) ──▶ «Aprobar y poner en cola» │
                                                        ▼
-GitHub Actions (cada 30 min) ──▶ /api/cron/tick ──▶ ¿hueco de schedule.txt? ──▶ Instagram ──▶ borra los JPG
+GitHub Actions (cada 30 min) ──▶ /api/cron/tick ──▶ ¿hueco de la programación? ──▶ Instagram ──▶ borra los JPG
 ```
 
-## Programación (`schedule.txt`)
+## Usuarios
+El panel es multiusuario. Un **administrador** crea y elimina cuentas en **Usuarios** (menú superior):
+- **Editor**: entra al panel y aprueba o rechaza posts.
+- **Administrador**: lo mismo, más gestionar usuarios y la programación.
+- La cuenta integrada **`admin`** usa la variable `ADMIN_PASSWORD` de Render. No se puede eliminar ni
+  cambiar desde el panel y sirve de recuperación si te quedas sin acceso.
+- Eliminar un usuario le quita el acceso **al instante** (aunque tenga la sesión abierta).
+- Cada persona cambia su contraseña en su cuenta (pulsa su nombre arriba). No hay «olvidé mi contraseña»:
+  el administrador borra la cuenta y la crea de nuevo.
+- Los posts aprobados guardan quién los aprobó.
+
+## Programación
+Se edita en el panel (**Programación**, solo administradores): añadir o eliminar huecos «día, hora, tipo»,
+la zona horaria y la tolerancia. Los cambios valen desde el siguiente aviso del programador, sin redesplegar.
+
+`schedule.txt` solo es la **programación inicial**: se copia a la base de datos la primera vez que arranca
+la app, y a partir de ahí manda la base de datos (editar el archivo ya no cambia nada). Formato:
 ```
 zona: Europe/Madrid
 tolerancia_minutos: 120
@@ -25,9 +41,9 @@ jueves 19:00 historia
   misma hora con tipos distintos salen juntos.
 - Un post por hueco: el **más antiguo de la cola de ese tipo** (orden de aprobación).
 - Si a esa hora no hay ninguno aprobado de ese tipo, el hueco **se pierde**: aprueba antes de la hora.
-- Un tipo sin ningún hueco en el archivo no se publica nunca; el panel lo avisa.
+- Un tipo sin ningún hueco no se publica nunca; el panel lo avisa.
+- Un hueco recién creado solo cuenta a partir de ese momento: si añades «hoy 10:00» a las 11:00, no publica a posteriori.
 - Horas de España peninsular, con cambio verano/invierno automático.
-- Para cambiarla: edita `app/schedule.txt`, `git push` y Render se redespliega solo.
 - El aviso de GitHub llega cada 30 min y puede retrasarse unos minutos: un post sale
   como mucho ~30 min después de la hora del hueco (`tolerancia_minutos` es el margen
   máximo de retraso admitido).
@@ -49,7 +65,7 @@ jueves 19:00 historia
 | Variable | Valor |
 |---|---|
 | `DATABASE_URL` | la connection string de Neon |
-| `ADMIN_PASSWORD` | la contraseña del panel (larga y única) |
+| `ADMIN_PASSWORD` | la contraseña de la cuenta integrada `admin` del panel (larga y única) |
 | `IG_USER_ID` | `17841443221425746` |
 | `IG_ACCESS_TOKEN` | el token de Instagram de larga duración |
 

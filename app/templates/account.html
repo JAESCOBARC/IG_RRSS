@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Mi cuenta{% endblock %}
+{% block content %}
+<p><a class="back" href="{{ url_for('index') }}">← Volver</a></p>
+<h1>Mi cuenta</h1>
+<section class="card">
+  <p><strong>{{ user.username }}</strong> · {{ roles[user.role] }}</p>
+</section>
+
+{% if user.builtin %}
+<section class="card">
+  <h2>Contraseña</h2>
+  <p class="muted">La cuenta integrada «admin» usa la variable <code>ADMIN_PASSWORD</code> de Render: se cambia allí, no desde el panel.</p>
+</section>
+{% else %}
+<section class="card">
+  <h2>Cambiar contraseña</h2>
+  <form method="post" class="stack">
+    <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+    <label for="current_password">Contraseña actual</label>
+    <input id="current_password" name="current_password" type="password" autocomplete="current-password" required>
+    <label for="new_password">Contraseña nueva <span class="muted">(mínimo {{ min_password }} caracteres)</span></label>
+    <input id="new_password" name="new_password" type="password" autocomplete="new-password" minlength="{{ min_password }}" required>
+    <label for="again">Repite la contraseña nueva</label>
+    <input id="again" name="again" type="password" autocomplete="new-password" minlength="{{ min_password }}" required>
+    <button class="btn primary" type="submit">Cambiar contraseña</button>
+  </form>
+</section>
+{% endif %}
+{% endblock %}

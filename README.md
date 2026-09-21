@@ -7,14 +7,14 @@ publica en los huecos que definas. Las imágenes no se guardan: se borran al pub
 ```
 Rutina de Claude (lunes)  ──▶  carrusel + publicación + historia  ──▶  Panel web (Render + Neon)
                                                         │  tú: revisar y aprobar
-GitHub Actions (cada 30 min)  ──▶  ¿hueco de schedule.txt?  ──▶  Instagram  ──▶  borra los JPG
+GitHub Actions (cada 30 min)  ──▶  ¿hueco de la programación?  ──▶  Instagram  ──▶  borra los JPG
 ```
 
 ## Piezas
 | Qué | Dónde |
 |---|---|
 | App de aprobación y publicación (Flask) | [`app/`](app/README.md) |
-| Horarios por tipo (carrusel martes 15:30; publicación e historia jueves 19:00) | [`app/schedule.txt`](app/schedule.txt) |
+| Horarios y usuarios | Se editan en el panel (Programación / Usuarios); [`app/schedule.txt`](app/schedule.txt) es solo la programación inicial |
 | Programador (avisa a la app cada 30 min) | [`.github/workflows/tick.yml`](.github/workflows/tick.yml) |
 | Despliegue en Render | [`render.yaml`](render.yaml) |
 | Generador de carruseles y reglas de copy | [`.claude/skills/carruseles-app/`](.claude/skills/carruseles-app/SKILL.md) |
@@ -32,6 +32,7 @@ GitHub Actions (cada 30 min)  ──▶  ¿hueco de schedule.txt?  ──▶  In
 
 Guía de despliegue, programación y pruebas en producción: [`app/README.md`](app/README.md).
 Reglas del proyecto (seguridad, CTAs prohibidos, quién puede publicar): [`CLAUDE.md`](CLAUDE.md).
+Estado, pruebas realizadas y pendientes: [`STATUS.md`](STATUS.md).
 
 ## Scripts en local
 ```

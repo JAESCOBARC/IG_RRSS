@@ -43,6 +43,23 @@ SCHEMA = [
         value TEXT NOT NULL,
         updated_at TEXT NOT NULL
     )""",
+    """CREATE TABLE IF NOT EXISTS users (
+        id TEXT PRIMARY KEY,
+        username TEXT NOT NULL UNIQUE,
+        password_hash TEXT NOT NULL,
+        role TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        created_by TEXT
+    )""",
+    # created_at: un hueco recién creado no rescata ocurrencias anteriores a su creación
+    """CREATE TABLE IF NOT EXISTS schedule_slots (
+        id TEXT PRIMARY KEY,
+        weekday INTEGER NOT NULL,
+        slot_time TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        UNIQUE (weekday, slot_time, kind)
+    )""",
 ]
 
 
@@ -106,6 +123,8 @@ def init_db():
         # migraciones: bases de datos creadas antes de que existiera el tipo de post
         if not _has_column(conn, "posts", "kind"):
             execute(conn, "ALTER TABLE posts ADD COLUMN kind TEXT NOT NULL DEFAULT 'carrusel'")
+        if not _has_column(conn, "posts", "approved_by"):
+            execute(conn, "ALTER TABLE posts ADD COLUMN approved_by TEXT")
 
 
 def kv_get(conn, key):

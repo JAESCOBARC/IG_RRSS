@@ -1,6 +1,6 @@
 name: Programador de publicaciones
 
-# Avisa a la app cada 30 minutos. La app decide qué toca publicar según app/schedule.txt
+# Avisa a la app cada 30 minutos. La app decide qué toca publicar según la programación guardada en la app (panel → Programación)
 # (un post por hueco y tipo: el más antiguo de la cola de ese tipo). GitHub Actions no
 # despierta a su hora exacta: puede tardar unos minutos.
 on:
