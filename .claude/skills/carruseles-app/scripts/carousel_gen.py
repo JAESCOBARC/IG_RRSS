@@ -8,10 +8,11 @@ Uso:
     python carousel_gen.py slides.json /tmp/post [--format carrusel|publicacion|historia]
 
 Formatos (--format, por defecto carrusel):
-    carrusel     2-10 slides de 1080x1350 (4:5), con flecha de deslizar y numeración
-    publicacion  1 imagen de 1080x1350 (4:5), sin flecha ni numeración
-    historia     1 imagen de 1080x1920 (9:16), con márgenes de seguridad arriba y abajo
-                 (~250 px que Instagram tapa con su interfaz) y sin flecha
+    carrusel     2-10 slides de 1080x1350 (4:5), fondo crema y letra oscura, con flecha de
+                 deslizar y numeración
+    publicacion  1 imagen de 1080x1350 (4:5), fondo verde y letra blanca, sin flecha ni numeración
+    historia     1 imagen de 1080x1920 (9:16), fondo verde y letra blanca, con márgenes de
+                 seguridad arriba y abajo (~250 px que Instagram tapa con su interfaz) y sin flecha
 
 Genera slide-01.jpg, slide-02.jpg... en la carpeta de salida.
 
@@ -38,6 +39,16 @@ BG = "#F4EFE1"       # cream / hueso (trabajoenexcel.com)
 DARK = "#182A20"     # texto principal
 ACCENT = "#2F6B47"   # verde bosque de acento — ver references/style-guide.md
 GREY = "#8A9088"
+WHITE = "#FFFFFF"
+GREY_ON_GREEN = "#B9D3C4"  # texto secundario sobre el fondo verde
+
+# Temas: el carrusel va en crema con letra oscura; publicación e historia, en verde con
+# letra blanca, para que los dos mensajes de la semana se distingan a simple vista.
+THEMES = {
+    "crema": {"bg": BG, "bold": DARK, "italic": ACCENT, "accent": ACCENT, "grey": GREY},
+    "verde": {"bg": ACCENT, "bold": WHITE, "italic": WHITE, "accent": WHITE, "grey": GREY_ON_GREEN},
+}
+FORMAT_THEME = {"carrusel": "crema", "publicacion": "verde", "historia": "verde"}
 
 MARGIN = 90
 MAX_W = W - 2 * MARGIN
@@ -99,19 +110,19 @@ def draw_text(d, x, y, text, path, size, fill, spacing=0, anchor="l"):
         cx += w + spacing * S
     return cx  # posición donde terminaría el siguiente carácter
 
-def draw_runs(d, runs, start_y, x=MARGIN):
+def draw_runs(d, runs, start_y, theme, x=MARGIN):
     y = start_y
     for text, style in runs:
         if style == "bold":
-            size, path, fill, lh = 84, BOLD_PATH, DARK, 98
+            size, path, fill, lh = 84, BOLD_PATH, theme["bold"], 98
         else:
-            size, path, fill, lh = 88, ITALIC_PATH, ACCENT, 102
+            size, path, fill, lh = 88, ITALIC_PATH, theme["italic"], 102
         for ln in wrap(text, path, size, MAX_W):
             draw_text(d, x, y, ln, path, size, fill)
             y += lh
     return y
 
-def arrow_icon(d, cx, cy, color=ACCENT, r=42):
+def arrow_icon(d, cx, cy, color, r=42):
     d.ellipse([(cx - r) * S, (cy - r) * S, (cx + r) * S, (cy + r) * S], outline=color, width=3 * S)
     lw = int(3.5 * S)
     d.line([(cx - 16) * S, cy * S, (cx + 14) * S, cy * S], fill=color, width=lw)
@@ -122,33 +133,34 @@ def build_slide(runs, fmt="carrusel", header_left="TRABAJO EN EXCEL", header_rig
                 cta_text=None, footer="TRABAJOENEXCEL.COM", swipe_hint=True,
                 slide_no=None, start_y=None):
     L = LAYOUTS[fmt]
+    T = THEMES[FORMAT_THEME[fmt]]
     H = L["H"]
     if start_y is None:
         start_y = L["start_y"]
-    img = Image.new("RGB", (W * S, H * S), BG)
+    img = Image.new("RGB", (W * S, H * S), T["bg"])
     d = ImageDraw.Draw(img)
 
-    end_y = draw_runs(d, runs, start_y)
+    end_y = draw_runs(d, runs, start_y, T)
 
     # cabecera: marca con ® en superíndice + etiqueta a la derecha
     hy = L["header_y"]
-    x_end = draw_text(d, MARGIN, hy, header_left, BOLD_PATH, 30, DARK, spacing=2)
-    d.text((x_end, (hy - 14) * S), "®", font=get_font(BOLD_PATH, 18 * S), fill=DARK, anchor="ls")
-    draw_text(d, W - MARGIN, hy, header_right, REGULAR_PATH, 24, GREY, spacing=3, anchor="r")
+    x_end = draw_text(d, MARGIN, hy, header_left, BOLD_PATH, 30, T["bold"], spacing=2)
+    d.text((x_end, (hy - 14) * S), "®", font=get_font(BOLD_PATH, 18 * S), fill=T["bold"], anchor="ls")
+    draw_text(d, W - MARGIN, hy, header_right, REGULAR_PATH, 24, T["grey"], spacing=3, anchor="r")
 
     # pie: línea, url y, según el formato, CTA / flecha / numeración
     line_y = L["line_y"]
     x2 = 380 if cta_text else 290
-    d.rectangle([MARGIN * S, (line_y - 2) * S, x2 * S, (line_y + 2) * S], fill=ACCENT)
-    draw_text(d, W - MARGIN, L["url_y"], footer, REGULAR_PATH, 22, GREY, spacing=2, anchor="r")
+    d.rectangle([MARGIN * S, (line_y - 2) * S, x2 * S, (line_y + 2) * S], fill=T["accent"])
+    draw_text(d, W - MARGIN, L["url_y"], footer, REGULAR_PATH, 22, T["grey"], spacing=2, anchor="r")
     if cta_text:
-        draw_text(d, MARGIN, L["cta_y"], cta_text, BOLD_PATH, 40, ACCENT, spacing=1)
+        draw_text(d, MARGIN, L["cta_y"], cta_text, BOLD_PATH, 40, T["accent"], spacing=1)
         if L["arrows"]:
-            arrow_icon(d, W - 160, L["cta_y"] - 25)
+            arrow_icon(d, W - 160, L["cta_y"] - 25, T["accent"])
     elif swipe_hint and L["arrows"]:
-        arrow_icon(d, W - 160, L["cta_y"] - 25, r=36)
+        arrow_icon(d, W - 160, L["cta_y"] - 25, T["accent"], r=36)
     if slide_no and L["numbering"]:
-        draw_text(d, MARGIN, L["cta_y"], slide_no, REGULAR_PATH, 22, GREY, spacing=2)
+        draw_text(d, MARGIN, L["cta_y"], slide_no, REGULAR_PATH, 22, T["grey"], spacing=2)
 
     return img.resize((W, H), Image.LANCZOS), end_y
 

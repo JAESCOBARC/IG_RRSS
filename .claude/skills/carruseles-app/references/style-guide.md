@@ -17,6 +17,14 @@ sitio (el fetch no expone estilos). Si el usuario da en algún momento un hex
 oficial de marca, actualiza esta tabla inmediatamente y trátalo como el
 estándar desde ese momento.
 
+## Tema verde (publicación e historia)
+El carrusel usa la paleta crema de arriba. La **publicación** y la **historia** usan otro
+tema, para que los mensajes de la semana se distingan a simple vista (lo aplica el script
+según `--format`, no hay que elegirlo):
+- Fondo: `#2F6B47` (el verde de acento)
+- Texto bold e itálica, marca, línea y CTA: `#FFFFFF` (blanco)
+- Texto secundario (etiqueta y URL del pie): `#B9D3C4` (verde claro)
+
 ## Tipografía
 Fuentes incluidas en `assets/fonts/` (sin depender de Canva, de internet ni de
 fuentes del sistema):
@@ -56,8 +64,8 @@ wrap automático. Si un slide queda muy denso (el script avisa con
 forzar el tamaño de fuente hacia abajo (rompe la jerarquía visual).
 
 ## Formatos
-- **carrusel** y **publicacion**: 1080x1350 (4:5). La publicación va sin flecha de deslizar
+- **carrusel** (crema) y **publicacion** (verde, letra blanca): 1080x1350 (4:5). La publicación va sin flecha de deslizar
   ni numeración; el CTA (`cta_text`) va abajo a la izquierda.
-- **historia**: 1080x1920 (9:16). Instagram superpone su interfaz en los ~250 px de arriba
+- **historia** (verde, letra blanca): 1080x1920 (9:16). Instagram superpone su interfaz en los ~250 px de arriba
   y de abajo: cabecera en y=300, texto desde y≈760 y pie/CTA por encima de y≈1620. Sin flecha.
   Es una sola imagen sin caption: el mensaje va entero en la imagen y debe leerse en segundos.

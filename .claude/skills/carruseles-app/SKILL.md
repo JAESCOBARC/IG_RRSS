@@ -15,9 +15,9 @@ para su tipo y borra las imágenes.
 
 | Tipo (`kind`) | Qué es | Imagen | Texto de publicación |
 |---|---|---|---|
-| `carrusel` | 3–5 slides que promocionan una URL (servicios) | 1080x1350 (4:5), `--format carrusel` | caption + hashtags |
-| `publicacion` | 1 sola imagen: **un truco o dato útil de Excel**, con la web al final | 1080x1350 (4:5), `--format publicacion` | caption + hashtags |
-| `historia` | 1 sola imagen: **promoción breve** de una URL | 1080x1920 (9:16), `--format historia` | **ninguno** |
+| `carrusel` | 3–5 slides que promocionan una URL (servicios) | 1080x1350 (4:5), `--format carrusel`, fondo crema y letra oscura | caption + hashtags |
+| `publicacion` | 1 sola imagen: **un truco o dato útil de Excel**, con la web al final | 1080x1350 (4:5), `--format publicacion`, **fondo verde y letra blanca** | caption + hashtags |
+| `historia` | 1 sola imagen: **promoción breve** de una URL | 1080x1920 (9:16), `--format historia`, **fondo verde y letra blanca** | **ninguno** |
 
 Las historias por API son solo una imagen: no admiten stickers, enlaces, encuestas
 ni texto de publicación, y duran 24 horas. **Todo el mensaje va dentro de la imagen**
