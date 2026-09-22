@@ -80,6 +80,10 @@ Estructura por slide: `runs` = lista de (texto, "bold"|"italic").
 **Publicación de una imagen** (`publicacion`): un truco, atajo, función o dato útil de
 Excel, correcto y comprobable (nombres de funciones en español: `BUSCARV`, `SI.ERROR`,
 `HOY()`; si el truco depende de la versión, dilo). No inventes cifras ni estadísticas.
+Si el truco lleva un atajo de teclado, lee antes `references/trucos-excel.md`: los
+atajos Ctrl+letra no siempre coinciden entre el inglés y el español (público
+España/LATAM), y ahí se registran las correcciones ya detectadas. Si el atajo no
+está verificado ahí, usa un truco que no dependa de un atajo de teclado.
 Una sola imagen: gancho en bold (el truco) + remate en itálica (por qué importa), y
 `"cta_text"` tipo «MÁS EN TRABAJOENEXCEL.COM» (máx. 28 caracteres). Sin `slide_no`.
 `source_url`: `https://www.trabajoenexcel.com/`.
@@ -196,6 +200,9 @@ flujo 1-7 para cada una, más estas reglas:
 ## Referencias
 - `references/urls.md` — dolor, keyword y CTA reales de las URLs verificadas. Léelo
   siempre en el paso 2, no lo repitas de memoria de conversaciones pasadas.
+- `references/trucos-excel.md` — atajos y datos de Excel ya corregidos por el
+  usuario (público España/LATAM). Léelo antes de dar un atajo de teclado en una
+  `publicacion`, y añade ahí cualquier corrección nueva que te haga el usuario.
 - `references/style-guide.md` — paleta, tipografía, estructura de slide y la
   regla anti-overflow. Léelo si vas a tocar colores/fuentes o si el script da
   overflow en varios slides seguidos.

@@ -99,6 +99,7 @@ borrado de imágenes, ocultación de credenciales en errores, renovación de tok
 - `git add -A` subió por error `.claude/settings.json` (permisos locales). Sacado del repo y añadido a `.gitignore`.
 - El auto-despliegue de Render no se dispara; se detectó porque la versión en línea no cambiaba (se comprobó con un archivo estático público).
 - El mismo `IG_USER_ID` mal copiado en Render hizo fallar la primera publicación real: de ahí el aviso de mirar el perfil antes de reintentar.
+- La tanda semanal del 2026-09-22 dio un atajo de Excel en inglés (Ctrl+E para Relleno rápido) en vez del de la versión en español (Ctrl+Mayús+E); el usuario lo corrigió tras verlo en el panel. Lección: los atajos con Ctrl+letra no siempre coinciden entre idiomas; ahora se verifican contra `.claude/skills/carruseles-app/references/trucos-excel.md` antes de darlos por buenos.
 
 ## 10. Operación (semana tipo)
 1. **Lunes ~08:02 (Madrid):** la rutina sube 3 borradores (carrusel, publicación, historia). Recibes el resumen con los enlaces.
