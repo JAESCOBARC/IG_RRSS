@@ -19,7 +19,7 @@ del servidor al publicar (o al rechazar) y del equipo al subirlas.
 |---|---|---|
 | App de aprobación y publicación (Flask) | Render, plan gratuito (`app/`, `render.yaml`) | Un solo worker; despliegue **manual** (ver §7) |
 | Base de datos (borradores, imágenes temporales, token renovado) | Neon (Postgres) | Tablas `posts`, `images`, `kv`, `users`, `schedule_slots`; las migraciones (`kind`, `approved_by`) se aplican al arrancar |
-| Programador (fiable) | cron externo (cron-job.org, cada 5 min) → `/api/cron/tick` directo | El cron de GitHub Actions se retrasaba horas (ver §7 histórico); esta es la vía primaria desde el 22 sep |
+| Programador (fiable) | cron externo (cron-job.org, cada 10 min) → `/api/cron/tick` directo | El cron de GitHub Actions se retrasaba horas (ver §7 histórico); esta es la vía primaria desde el 22 sep. Cuenta y job del usuario, fuera del repo |
 | Programador (respaldo + pruebas) | GitHub Actions, `.github/workflows/tick.yml` (cron desplazado a `:12`/`:42`) | Secrets `APP_URL` y `APP_API_KEY`; sigue siendo el que usa el usuario para «forzar» y el que avisa por correo si falla una publicación |
 | Generación semanal | Rutina de Claude en la nube (lunes 08:02 Madrid) | Sin conectores; entorno «Default» con `IG_APP_URL` + credencial de API |
 | Generador de imágenes y reglas de copy | `.claude/skills/carruseles-app/` | Pillow, fuentes incluidas |
@@ -66,6 +66,7 @@ borrado de imágenes, ocultación de credenciales en errores, renovación de tok
 - Programador de GitHub → app: responde `idle` fuera de hueco; con «forzar» publica y el workflow espera al resultado y falla con aviso si algo va mal.
 - **Publicaciones reales:** un carrusel (publicado y enlace verificado), y una **historia** (publicada por la API, enlace responde 200).
 - **Primer hueco real (martes 15:30):** el carrusel aprobado estaba correctamente en cola, pero el cron de GitHub Actions no disparó ningún tick entre las 12:17 y las 14:34 UTC (más de 2 h, cuando debería avisar cada 30 min) — el hueco (13:30–15:30 UTC con 120 min de tolerancia) casi se pierde por el retraso. Un `workflow_dispatch` manual sin `forzar` (mismo comportamiento que el cron, solo comprobó el hueco vigente) publicó correctamente: https://www.instagram.com/p/Ddl9iQGm_Fm/
+- **Cron externo (cron-job.org) como vía primaria:** configurado el mismo día tras el incidente anterior — job «IG-RRSS», `POST /api/cron/tick` con cabecera `Authorization`, cada 10 min, timeout 60 s. «Realizar ejecución de prueba» dio `200 OK` con `Content-Type: application/json` (la primera prueba dio "salida demasiado grande" por probar antes de guardar la cabecera; con la cabecera guardada, correcto).
 - Fallo controlado: con un `IG_USER_ID` incorrecto Meta devolvió 400; la app lo marcó `failed`, ocultó las credenciales, conservó las imágenes y no publicó nada. Tras corregir Render, publicó bien.
 - Migración de la base de datos (`kind`): aplicada al arrancar la versión nueva (si fallara, el despliegue no habría quedado en línea).
 - Borrado de imágenes tras publicar: comprobado (404 en `/media/...`; el panel indica «las imágenes se borraron»).
@@ -75,8 +76,8 @@ borrado de imágenes, ocultación de credenciales en errores, renovación de tok
 |---|---|
 | Publicación real de una **publicación de una imagen** | Sin probar en Instagram (mismo código que un carrusel simple, validada en local) |
 | Jueves 19:00 (publicación + historia juntas) | Sin observar todavía |
-| **Fiabilidad del cron de GitHub Actions** | El `schedule: */30 * * * *` se retrasaba horas (huecos de 2–7 h entre ejecuciones observados el 20–22 sep; coincide con un incidente de GitHub de finales de agosto 2026, no solo con la congestión habitual en :00/:30). **Mitigación aplicada el 22 sep:** `tick.yml` pasa a ser respaldo (cron desplazado a `:12`/`:42`) y se añade cron-job.org como vía primaria (`app/README.md` §4a) — reclamar un hueco es atómico, así que las dos vías no pueden publicar el mismo hueco dos veces. **Pendiente que el usuario cree la cuenta en cron-job.org** y configure el cronjob (necesita pegar el `API_KEY` de Render ahí, algo que Claude no puede hacer por no tener el secreto) |
 | Aspecto de la **historia en el móvil** (márgenes de seguridad de 250 px) | Sin ver; comprobarlo abriendo la historia publicada |
+| **cron-job.org como único punto de fallo de la vía primaria** | Si su cuenta o el job se deshabilitan (p. ej. demasiados fallos) y nadie se entera, se vuelve a depender del cron de GitHub (lento) hasta el aviso rojo del panel a las 2 h. Mitigado en parte: notificaciones de fallo activadas en el job; sin probar el aviso real |
 | **Dominios de trabajoenexcel.com bloqueados** en el entorno de la rutina (`EGRESS_BLOCKED`) | Abierto: la rutina no puede leer las páginas y usa los ángulos de `urls.md` (solo 3 de las 7 URLs) |
 | **Render no despliega solo** al hacer commit (Auto-Deploy en «On Commit» pero no se dispara) | Abierto: hay que pulsar *Manual Deploy*. Opción: usar el *Deploy Hook* desde un workflow |
 | **Token de Instagram** filtrado en el historial público (commit `7dc2497`, por unos secrets cruzados) | Abierto por decisión del usuario; la solución limpia es revocarlo y generar otro |
@@ -123,3 +124,4 @@ borrado de imágenes, ocultación de credenciales en errores, renovación de tok
 | `43bc838` | Retirado el sistema antiguo (`queue/`, `publish.py`, workflows viejos) |
 | `0863b58` | `.claude/settings.json` deja de versionarse |
 | `4ce02c3` | **Tres tipos** (carrusel, publicación, historia), horarios por tipo, generador `--format`, migración de la BD |
+| `c4dcd6a` | `tick.yml` pasa a respaldo (cron desplazado a `:12`/`:42`); cron-job.org (10 min) documentado como vía primaria tras el retraso de horas del cron de GitHub el 22 sep |

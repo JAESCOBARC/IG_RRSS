@@ -12,8 +12,8 @@ allí, se publican en Instagram. Repo: `JAESCOBARC/IG_RRSS` (**público**).
 2. La app (`app/`, Flask, desplegada en Render; blueprint en `render.yaml`) guarda
    el borrador en Postgres (Neon) y lo muestra en un panel con usuarios y contraseña: slides,
    caption y hashtags, con botones «Aprobar y poner en cola» / «Rechazar».
-3. Al aprobar, el post pasa a la **cola**. Un cron externo (cron-job.org, cada 5 min — fiable;
-   ver `app/README.md` §4) avisa a la app en `/api/cron/tick`; un workflow de GitHub
+3. Al aprobar, el post pasa a la **cola**. Un cron externo (cron-job.org, cada 10 min — fiable,
+   configurado desde el 22 sep; ver `app/README.md` §4) avisa a la app en `/api/cron/tick`; un workflow de GitHub
    (`tick.yml`) hace lo mismo de **respaldo** (~cada 30 min, pero puede retrasarse horas: los
    `schedule` de GitHub Actions no son fiables por sí solos, de ahí el cron externo) y además
    es el que usa el usuario para las pruebas manuales con «forzar» y el que avisa por correo si

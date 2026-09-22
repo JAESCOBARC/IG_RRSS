@@ -10,7 +10,7 @@ Claude ──(scripts/upload_draft.py)──▶ borrador ──▶ Neon (Postgre
                                                        │
 tú y tu equipo ──▶ panel (usuario y contraseña) ──▶ «Aprobar y poner en cola» │
                                                        ▼
-cron-job.org (cada 5 min, fiable) ──┐
+cron-job.org (cada 10 min, fiable) ──┐
 GitHub Actions (respaldo, cada ~30 min) ──┴──▶ /api/cron/tick ──▶ ¿hueco de la programación? ──▶ Instagram ──▶ borra los JPG
 ```
 
@@ -45,7 +45,7 @@ jueves 19:00 historia
 - Un tipo sin ningún hueco no se publica nunca; el panel lo avisa.
 - Un hueco recién creado solo cuenta a partir de ese momento: si añades «hoy 10:00» a las 11:00, no publica a posteriori.
 - Horas de España peninsular, con cambio verano/invierno automático.
-- El aviso fiable (cron-job.org) llega cada 5 min: un post sale como mucho ~5 min después
+- El aviso fiable (cron-job.org) llega cada 10 min: un post sale como mucho ~10 min después
   de la hora del hueco. El de GitHub Actions es solo respaldo y puede retrasarse mucho más
   (ver §4); `tolerancia_minutos` es el margen máximo de retraso admitido antes de perder el hueco.
 
@@ -86,18 +86,28 @@ IG_APP_API_KEY=<valor de API_KEY>
 
 **4a. Cron externo (fiable, es el que de verdad publica a la hora):** los avisos
 `schedule` de GitHub Actions pueden retrasarse **horas** (incidente conocido de GitHub,
-no un simple "puede tardar unos minutos"), así que no basta por sí solo. Usa un cron
-externo gratuito para llamar directamente al endpoint:
+no un simple "puede tardar unos minutos"), así que no basta por sí solo. Se usa un cron
+externo gratuito que llama directamente al endpoint — **ya configurado y verificado en
+producción desde el 22 sep 2026** (cuenta de cron-job.org del usuario; job «IG-RRSS»,
+`*/10 * * * *`, probado con 200 OK). Para un despliegue nuevo, repite estos pasos:
 1. Crea una cuenta gratuita en <https://cron-job.org> (o similar: cualquier servicio que
    haga peticiones HTTP con cabeceras personalizadas en un intervalo de minutos sirve).
 2. Nuevo cronjob:
    - URL: `https://<tu-servicio>.onrender.com/api/cron/tick`
-   - Método: `POST`
-   - Cabecera: `Authorization: Bearer <valor de API_KEY>` (el mismo de Render → Environment;
-     **no lo pegues en el chat con Claude ni en el repo**, solo en el formulario de cron-job.org)
-   - Intervalo: cada 5 minutos (cron-job.org permite hasta cada minuto; 5 min deja de sobra
-     margen dentro de los 120 min de tolerancia por defecto)
-3. Guarda. cron-job.org no necesita nada del repo: llama directo a la app.
+   - Método: `POST` (pestaña Avanzado; cuerpo de la solicitud vacío)
+   - Cabecera (pestaña Avanzado → Encabezados): `Authorization` / `Bearer <valor de API_KEY>`
+     (el mismo de Render → Environment; **no lo pegues en el chat con Claude ni en el repo**,
+     solo en el formulario de cron-job.org)
+   - Tiempo de espera agotado: 60 s (el plan gratuito de Render tarda hasta ~1 min en
+     despertar si llevaba un rato dormido; con 30 s por defecto puede dar timeout)
+   - Intervalo: cada 10 minutos deja de sobra margen dentro de los 120 min de tolerancia
+     por defecto (cron-job.org permite bajar hasta cada minuto si se quiere más precisión)
+   - Notificaciones: activa «cuando la ejecución del cronjob falle» (2 fallos consecutivos,
+     para no avisar por un simple hipo de Render) y «cuando el cronjob se deshabilite por
+     demasiados fallos»
+3. Guarda y prueba con «Realizar ejecución de prueba»: debe dar 200 OK con
+   `Content-Type: application/json`. cron-job.org no necesita nada del repo: llama
+   directo a la app.
 
 **4b. GitHub Actions (respaldo + pruebas manuales):** el workflow ya existe
 (`tick.yml`). Crea los dos secrets del repo (te pide el valor de cada uno):
