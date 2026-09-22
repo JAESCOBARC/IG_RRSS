@@ -1,11 +1,18 @@
 name: Programador de publicaciones
 
-# Avisa a la app cada 30 minutos. La app decide qué toca publicar según la programación guardada en la app (panel → Programación)
-# (un post por hueco y tipo: el más antiguo de la cola de ese tipo). GitHub Actions no
-# despierta a su hora exacta: puede tardar unos minutos.
+# Aviso de RESPALDO a la app. La app decide qué toca publicar según la programación guardada
+# en la app (panel → Programación) (un post por hueco y tipo: el más antiguo de la cola de ese
+# tipo). El aviso PRIMARIO y fiable es un cron externo (cron-job.org, ver app/README.md §4) que
+# llama a /api/cron/tick directamente cada pocos minutos: los avisos programados de GitHub
+# Actions pueden retrasarse horas (incidente conocido de GitHub, no solo "unos minutos"), así
+# que este workflow ya no es la única vía. Se mantiene porque, si el cron externo no ha
+# reclamado el hueco todavía, esperará el resultado de la publicación y avisará por correo si
+# falla; si el hueco ya se cubrió, la app responde "slot-used" sin hacer nada (reclamar un hueco
+# es atómico, no hay riesgo de publicar dos veces). El minuto de disparo está desplazado de las
+# horas en punto y medias (:00/:30) porque son las de mayor congestión en GitHub.
 on:
   schedule:
-    - cron: "*/30 * * * *"
+    - cron: "12,42 * * * *"
   workflow_dispatch:
     inputs:
       forzar:

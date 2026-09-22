@@ -12,13 +12,18 @@ allí, se publican en Instagram. Repo: `JAESCOBARC/IG_RRSS` (**público**).
 2. La app (`app/`, Flask, desplegada en Render; blueprint en `render.yaml`) guarda
    el borrador en Postgres (Neon) y lo muestra en un panel con usuarios y contraseña: slides,
    caption y hashtags, con botones «Aprobar y poner en cola» / «Rechazar».
-3. Al aprobar, el post pasa a la **cola**. Un workflow (`tick.yml`) avisa a la app
-   cada 30 min y, en cada hueco de la programación del panel (`app/schedule.txt` es solo la inicial) —cada hueco es «día hora tipo»:
-   carrusel el martes 15:30; publicación e historia el jueves 19:00, hora de España
-   peninsular—, **la app publica el post más antiguo de la cola de ese tipo**
-   (sirviendo ella misma las imágenes por una URL pública, solo mientras dura la
-   publicación) y **borra los JPG**. Solo conserva título, texto, estado y enlace.
-   Si en un hueco no hay nada aprobado de ese tipo, ese hueco se pierde.
+3. Al aprobar, el post pasa a la **cola**. Un cron externo (cron-job.org, cada 5 min — fiable;
+   ver `app/README.md` §4) avisa a la app en `/api/cron/tick`; un workflow de GitHub
+   (`tick.yml`) hace lo mismo de **respaldo** (~cada 30 min, pero puede retrasarse horas: los
+   `schedule` de GitHub Actions no son fiables por sí solos, de ahí el cron externo) y además
+   es el que usa el usuario para las pruebas manuales con «forzar» y el que avisa por correo si
+   una publicación falla. En cada hueco de la programación del panel (`app/schedule.txt` es solo
+   la inicial) —cada hueco es «día hora tipo»: carrusel el martes 15:30; publicación e historia
+   el jueves 19:00, hora de España peninsular—, **la app publica el post más antiguo de la cola
+   de ese tipo** (sirviendo ella misma las imágenes por una URL pública, solo mientras dura la
+   publicación) y **borra los JPG**. Solo conserva título, texto, estado y enlace. Si en un
+   hueco no hay nada aprobado de ese tipo, ese hueco se pierde. Reclamar un hueco es atómico:
+   aunque los dos avisos lleguen casi a la vez, nunca se publica dos veces.
 4. El token de Instagram se renueva solo (al iniciar sesión o publicar, cada
    20 días) y se guarda en la base de datos.
 

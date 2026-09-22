@@ -10,7 +10,8 @@ Claude ──(scripts/upload_draft.py)──▶ borrador ──▶ Neon (Postgre
                                                        │
 tú y tu equipo ──▶ panel (usuario y contraseña) ──▶ «Aprobar y poner en cola» │
                                                        ▼
-GitHub Actions (cada 30 min) ──▶ /api/cron/tick ──▶ ¿hueco de la programación? ──▶ Instagram ──▶ borra los JPG
+cron-job.org (cada 5 min, fiable) ──┐
+GitHub Actions (respaldo, cada ~30 min) ──┴──▶ /api/cron/tick ──▶ ¿hueco de la programación? ──▶ Instagram ──▶ borra los JPG
 ```
 
 ## Usuarios
@@ -44,9 +45,9 @@ jueves 19:00 historia
 - Un tipo sin ningún hueco no se publica nunca; el panel lo avisa.
 - Un hueco recién creado solo cuenta a partir de ese momento: si añades «hoy 10:00» a las 11:00, no publica a posteriori.
 - Horas de España peninsular, con cambio verano/invierno automático.
-- El aviso de GitHub llega cada 30 min y puede retrasarse unos minutos: un post sale
-  como mucho ~30 min después de la hora del hueco (`tolerancia_minutos` es el margen
-  máximo de retraso admitido).
+- El aviso fiable (cron-job.org) llega cada 5 min: un post sale como mucho ~5 min después
+  de la hora del hueco. El de GitHub Actions es solo respaldo y puede retrasarse mucho más
+  (ver §4); `tolerancia_minutos` es el margen máximo de retraso admitido antes de perder el hueco.
 
 ## Despliegue paso a paso
 
@@ -81,13 +82,32 @@ IG_APP_URL=https://<tu-servicio>.onrender.com
 IG_APP_API_KEY=<valor de API_KEY>
 ```
 
-### 4. Conectar el programador (GitHub Actions)
-Crea los dos secrets del repo (te pide el valor de cada uno):
+### 4. Conectar el programador
+
+**4a. Cron externo (fiable, es el que de verdad publica a la hora):** los avisos
+`schedule` de GitHub Actions pueden retrasarse **horas** (incidente conocido de GitHub,
+no un simple "puede tardar unos minutos"), así que no basta por sí solo. Usa un cron
+externo gratuito para llamar directamente al endpoint:
+1. Crea una cuenta gratuita en <https://cron-job.org> (o similar: cualquier servicio que
+   haga peticiones HTTP con cabeceras personalizadas en un intervalo de minutos sirve).
+2. Nuevo cronjob:
+   - URL: `https://<tu-servicio>.onrender.com/api/cron/tick`
+   - Método: `POST`
+   - Cabecera: `Authorization: Bearer <valor de API_KEY>` (el mismo de Render → Environment;
+     **no lo pegues en el chat con Claude ni en el repo**, solo en el formulario de cron-job.org)
+   - Intervalo: cada 5 minutos (cron-job.org permite hasta cada minuto; 5 min deja de sobra
+     margen dentro de los 120 min de tolerancia por defecto)
+3. Guarda. cron-job.org no necesita nada del repo: llama directo a la app.
+
+**4b. GitHub Actions (respaldo + pruebas manuales):** el workflow ya existe
+(`tick.yml`). Crea los dos secrets del repo (te pide el valor de cada uno):
 ```
 gh secret set APP_URL --repo JAESCOBARC/IG_RRSS          # https://<tu-servicio>.onrender.com
 gh secret set APP_API_KEY --repo JAESCOBARC/IG_RRSS      # el mismo valor de API_KEY
 ```
-El workflow **Programador de publicaciones** empezará a avisar cada 30 min.
+El workflow **Programador de publicaciones** empezará a avisar (de respaldo, cada ~30 min con
+retrasos posibles) y sigue siendo el que usas para las pruebas manuales con **forzar** (§ Probar
+en producción, paso 5) y el que avisa por correo si una publicación falla.
 
 ## Probar en producción
 1. **Salud:** `/healthz` responde `ok`; el login funciona.
@@ -119,13 +139,14 @@ comprueba en Instagram que no se publicó antes de reabrirlo) y **Rechazado**.
 
 ## Cosas a saber
 - **Plan gratuito de Render:** se duerme tras ~15 min sin uso y tarda ~1 min en despertar.
-  Los avisos cada 30 min lo despiertan y el workflow reintenta mientras arranca.
+  Los avisos de cron-job.org (cada 5 min) lo mantienen despierto; ambos programadores
+  reintentan mientras arranca.
 - **Imágenes:** solo se pueden ver sin iniciar sesión mientras el post está en
   «Publicando» (Instagram las descarga entonces). En cola o como borrador, solo con sesión.
 - **Aviso del programador:** si no llega ninguno en 2 h y hay posts en cola, el panel
-  muestra un aviso rojo. GitHub desactiva los workflows programados tras 60 días sin
-  actividad en el repo; el propio workflow intenta reactivarse cada vez. Si aun así se
-  parara, se reactiva en la pestaña Actions.
+  muestra un aviso rojo (revisa que cron-job.org siga activo). GitHub desactiva los workflows
+  programados tras 60 días sin actividad en el repo; el propio workflow intenta reactivarse
+  cada vez. Si aun así se parara, se reactiva en la pestaña Actions.
 - **Token de Instagram:** el de `IG_ACCESS_TOKEN` es el inicial; la app lo renueva sola
   (cada 20 días, al iniciar sesión o publicar) y guarda el nuevo en la base de datos.
   Si lo cambias en Render, el nuevo valor manda.
