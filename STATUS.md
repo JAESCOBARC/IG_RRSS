@@ -22,7 +22,7 @@ del servidor al publicar (o al rechazar) y del equipo al subirlas.
 | Programador (fiable) | cron externo (cron-job.org, cada 10 min) → `/api/cron/tick` directo | El cron de GitHub Actions se retrasaba horas (ver §7 histórico); esta es la vía primaria desde el 22 sep. Cuenta y job del usuario, fuera del repo |
 | Programador (respaldo + pruebas) | GitHub Actions, `.github/workflows/tick.yml` (cron desplazado a `:12`/`:42`) | Secrets `APP_URL` y `APP_API_KEY`; sigue siendo el que usa el usuario para «forzar» y el que avisa por correo si falla una publicación |
 | Generación semanal | Rutina de Claude en la nube (lunes 08:02 Madrid) | Sin conectores; entorno «Default» con `IG_APP_URL` + credencial de API |
-| Generador de imágenes y reglas de copy | `.claude/skills/carruseles-app/` | Pillow, fuentes incluidas |
+| Generador de imágenes y reglas de copy | `.claude/skills/carruseles-app/` | Pillow, fuente Inter Tight incluida; estilo «dark editorial» (negro, verde tinta y lima; ver `references/style-guide.md`) |
 | Subida de borradores desde Claude | `scripts/upload_draft.py`, `scripts/pick_urls.py` | Se ejecutan desde local o desde la rutina |
 | Horarios | Panel → Programación (base de datos) | `app/schedule.txt` solo es la programación inicial (se copia una vez) |
 | Usuarios | Panel → Usuarios (base de datos) | Roles `admin` y `editor`; cuenta integrada `admin` = `ADMIN_PASSWORD` |
@@ -125,3 +125,4 @@ borrado de imágenes, ocultación de credenciales en errores, renovación de tok
 | `0863b58` | `.claude/settings.json` deja de versionarse |
 | `4ce02c3` | **Tres tipos** (carrusel, publicación, historia), horarios por tipo, generador `--format`, migración de la BD |
 | `c4dcd6a` | `tick.yml` pasa a respaldo (cron desplazado a `:12`/`:42`); cron-job.org (10 min) documentado como vía primaria tras el retraso de horas del cron de GitHub el 22 sep |
+| _(este commit)_ | **Rediseño visual**: estilo oscuro con acento lima (`#D4FF3F`), Inter Tight Black, botones en píldora. Carrusel negro/verde tinta, publicación negra, historia lima. Solo probado en local con muestras (imágenes revisadas a ojo); sin subir como borrador a la app ni probado en la rutina de la nube |

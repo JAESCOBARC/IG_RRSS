@@ -2,28 +2,34 @@
 Generador de imágenes de Instagram para trabajoenexcel.com.
 Dibuja con Pillow (wrap de texto medido con la fuente real, sin overflow) y guarda JPG,
 el único formato que admite la API de Instagram. No necesita rsvg ni fuentes del
-sistema: usa las de assets/fonts.
+sistema: usa Inter Tight de assets/fonts.
+
+Estilo «dark editorial»: titular enorme en Black con tracking apretado, una frase de acento
+en lima, párrafo opcional en gris y botones en píldora. Ver references/style-guide.md.
 
 Uso:
     python carousel_gen.py slides.json /tmp/post [--format carrusel|publicacion|historia]
 
 Formatos (--format, por defecto carrusel):
-    carrusel     2-10 slides de 1080x1350 (4:5), fondo crema y letra oscura, con flecha de
-                 deslizar y numeración
-    publicacion  1 imagen de 1080x1350 (4:5), fondo verde y letra blanca, sin flecha ni numeración
-    historia     1 imagen de 1080x1920 (9:16), fondo verde y letra blanca, con márgenes de
-                 seguridad arriba y abajo (~250 px que Instagram tapa con su interfaz) y sin flecha
+    carrusel     2-10 slides de 1080x1350 (4:5). Portada y CTA final en negro; las intermedias
+                 alternan verde tinta y negro (o el tema que indique "theme")
+    publicacion  1 imagen de 1080x1350 (4:5), negro
+    historia     1 imagen de 1080x1920 (9:16), lima con letra negra, con márgenes de seguridad
+                 arriba y abajo (~250 px que Instagram tapa con su interfaz)
 
 Genera slide-01.jpg, slide-02.jpg... en la carpeta de salida.
 
 slides.json: lista de objetos con esta forma:
 {
-  "runs": [["TEXTO BOLD EN MAYUSCULAS", "bold"], ["frase en italica verde", "italic"]],
+  "runs": [["Titular en blanco", "bold"], ["frase de acento", "italic"]],
+  "body": "Párrafo de apoyo en gris",   // opcional
   "slide_no": "01 / 06",      // opcional, solo carrusel; null en el slide de CTA
-  "cta_text": "PLANTILLA DE SPRINT.",  // opcional, solo en el slide final / imagen única
+  "cta_text": "Haz el test gratis",     // opcional, solo en el slide final / imagen única
   "swipe_hint": true,          // opcional, solo carrusel; false si hay cta_text
-  "start_y": 520               // opcional, ajustar si el bloque de texto es largo
+  "theme": "negro|tinta|lima", // opcional, solo carrusel: fuerza el fondo de esa slide
+  "start_y": 220               // opcional, fija el inicio del titular
 }
+"italic" ya no es cursiva: es el color de acento (lima; en la historia, blanco sobre píldora negra).
 
 Requiere: pip install Pillow
 """
@@ -35,58 +41,60 @@ from PIL import Image, ImageDraw, ImageFont
 
 W = 1080
 S = 2                # supersampling: se dibuja a 2x y se reduce (bordes suaves)
-BG = "#F4EFE1"       # cream / hueso (trabajoenexcel.com)
-DARK = "#182A20"     # texto principal
-ACCENT = "#2F6B47"   # verde bosque de acento — ver references/style-guide.md
-GREY = "#8A9088"
-WHITE = "#FFFFFF"
-GREY_ON_GREEN = "#B9D3C4"  # texto secundario sobre el fondo verde
+BLACK = "#0A0A0A"
+INK = "#1A2410"      # negro con matiz verde, familia del lima
+LIME = "#D4FF3F"
+WHITE = "#F5F5F5"
+GREY = "#C7C7C7"
+LINE = "#5F5F5F"
 
-# Temas: el carrusel va en crema con letra oscura; publicación e historia, en verde con
-# letra blanca, para que los dos mensajes de la semana se distingan a simple vista.
 THEMES = {
-    "crema": {"bg": BG, "bold": DARK, "italic": ACCENT, "accent": ACCENT, "grey": GREY},
-    "verde": {"bg": ACCENT, "bold": WHITE, "italic": WHITE, "accent": WHITE, "grey": GREY_ON_GREEN},
+    "negro": {"bg": BLACK, "text": WHITE, "accent": LIME, "grey": GREY, "pill_bg": LIME,
+              "pill_fg": BLACK, "outline": LINE, "outline_fg": WHITE, "mark": None},
+    "tinta": {"bg": INK, "text": WHITE, "accent": LIME, "grey": GREY, "pill_bg": LIME,
+              "pill_fg": BLACK, "outline": LINE, "outline_fg": WHITE, "mark": None},
+    # sobre lima el acento va en blanco sobre una píldora negra (el lima no se vería)
+    "lima": {"bg": LIME, "text": BLACK, "accent": WHITE, "grey": "#2B3410", "pill_bg": BLACK,
+             "pill_fg": LIME, "outline": BLACK, "outline_fg": BLACK, "mark": BLACK},
 }
-FORMAT_THEME = {"carrusel": "crema", "publicacion": "verde", "historia": "verde"}
 
-MARGIN = 90
+MARGIN = 60
 MAX_W = W - 2 * MARGIN
+TRACK = -0.02        # tracking del titular (fracción del tamaño)
+MAX_SIZE, MIN_SIZE = 168, 84
 
 
-def _layout(h, header_y, start_y, line_y, url_y, cta_y, arrows, numbering, limit):
-    return {"H": h, "header_y": header_y, "start_y": start_y, "line_y": line_y, "url_y": url_y,
-            "cta_y": cta_y, "arrows": arrows, "numbering": numbering, "limit": limit}
+def _layout(h, header_y, start_y, pills_y, limit):
+    return {"H": h, "header_y": header_y, "start_y": start_y, "pills_y": pills_y, "limit": limit}
 
 
 LAYOUTS = {
-    "carrusel": _layout(1350, 90, 520, 1350 - 90, 1350 - 60, 1350 - 160, True, True, 1350 - 200),
-    "publicacion": _layout(1350, 90, 520, 1350 - 90, 1350 - 60, 1350 - 160, False, False, 1350 - 200),
+    "carrusel": _layout(1350, 100, 190, 1350 - 120, 1350 - 120 - 40),
+    "publicacion": _layout(1350, 100, 190, 1350 - 120, 1350 - 120 - 40),
     # historia: Instagram tapa ~250 px arriba y abajo; nada importante fuera de y=250..1670
-    "historia": _layout(1920, 300, 760, 1920 - 330, 1920 - 300, 1920 - 430, False, False, 1920 - 560),
+    "historia": _layout(1920, 300, 400, 1920 - 340, 1920 - 340 - 40),
 }
 
-FONTS = Path(__file__).resolve().parent.parent / "assets" / "fonts"
-BOLD_PATH = str(FONTS / "DejaVuSansCondensed-Bold.ttf")
-REGULAR_PATH = str(FONTS / "DejaVuSansCondensed.ttf")
-ITALIC_PATH = str(FONTS / "DejaVuSerifCondensed-BoldItalic.ttf")
+FONT_PATH = str(Path(__file__).resolve().parent.parent / "assets" / "fonts" / "InterTight-Variable.ttf")
+BLACK_W, SEMIBOLD_W, REGULAR_W = 900, 600, 400
 
 _font_cache = {}
-def get_font(path, size):
-    key = (path, size)
+def get_font(weight, size):
+    key = (weight, size)
     if key not in _font_cache:
-        _font_cache[key] = ImageFont.truetype(path, size)
+        f = ImageFont.truetype(FONT_PATH, size)
+        f.set_variation_by_axes([weight])
+        _font_cache[key] = f
     return _font_cache[key]
 
-def measure(text, path, size):
-    return get_font(path, size).getlength(text)
+def measure(text, weight, size, track=0.0):
+    return get_font(weight, size).getlength(text) + track * size * max(len(text) - 1, 0)
 
-def wrap(text, path, size, max_w):
-    words = text.split(" ")
+def wrap(text, weight, size, max_w, track=0.0):
     lines, cur = [], ""
-    for w in words:
+    for w in text.split(" "):
         trial = (cur + " " + w).strip()
-        if measure(trial, path, size) <= max_w:
+        if measure(trial, weight, size, track) <= max_w:
             cur = trial
         else:
             if cur:
@@ -96,73 +104,111 @@ def wrap(text, path, size, max_w):
         lines.append(cur)
     return lines
 
-def draw_text(d, x, y, text, path, size, fill, spacing=0, anchor="l"):
-    """Texto con baseline en y. anchor 'l' (izquierda) o 'r' (derecha)."""
-    f = get_font(path, size * S)
-    if not spacing:
-        d.text((x * S, y * S), text, font=f, fill=fill, anchor="l" + "s" if anchor == "l" else "rs")
-        return
-    widths = [f.getlength(c) for c in text]
-    total = sum(widths) + spacing * S * (len(text) - 1)
+def draw_text(d, x, y, text, weight, size, fill, track=0.0, anchor="l"):
+    """Texto con baseline en y (coordenadas finales; se escala por S). Devuelve el ancho."""
+    f = get_font(weight, size * S)
+    total = measure(text, weight, size * S, track)
     cx = x * S if anchor == "l" else x * S - total
-    for c, w in zip(text, widths):
-        d.text((cx, y * S), c, font=f, fill=fill, anchor="ls")
-        cx += w + spacing * S
-    return cx  # posición donde terminaría el siguiente carácter
+    if not track:
+        d.text((cx, y * S), text, font=f, fill=fill, anchor="ls")
+    else:
+        for i, c in enumerate(text):
+            off = f.getlength(text[:i]) + track * size * S * i
+            d.text((cx + off, y * S), c, font=f, fill=fill, anchor="ls")
+    return total / S
 
-def draw_runs(d, runs, start_y, theme, x=MARGIN):
-    y = start_y
-    for text, style in runs:
-        if style == "bold":
-            size, path, fill, lh = 84, BOLD_PATH, theme["bold"], 98
-        else:
-            size, path, fill, lh = 88, ITALIC_PATH, theme["italic"], 102
-        for ln in wrap(text, path, size, MAX_W):
-            draw_text(d, x, y, ln, path, size, fill)
-            y += lh
-    return y
+def pill(d, x, y, text, size, fg, bg=None, outline=None, arrow=True):
+    """Píldora con texto semibold, borde superior en y. Devuelve su ancho."""
+    label = text + ("  →" if arrow else "")
+    h, pad = 56 + 8, 40
+    w = measure(label, SEMIBOLD_W, size) + 2 * pad
+    box = [x * S, y * S, (x + w) * S, (y + h) * S]
+    d.rounded_rectangle(box, radius=h * S // 2, fill=bg, outline=outline, width=2 * S if outline else 0)
+    draw_text(d, x + pad, y + h / 2 + size * 0.36, label, SEMIBOLD_W, size, fg)
+    return w
 
-def arrow_icon(d, cx, cy, color, r=42):
-    d.ellipse([(cx - r) * S, (cy - r) * S, (cx + r) * S, (cy + r) * S], outline=color, width=3 * S)
-    lw = int(3.5 * S)
-    d.line([(cx - 16) * S, cy * S, (cx + 14) * S, cy * S], fill=color, width=lw)
-    d.line([(cx + 2) * S, (cy - 12) * S, (cx + 16) * S, cy * S], fill=color, width=lw)
-    d.line([(cx + 2) * S, (cy + 12) * S, (cx + 16) * S, cy * S], fill=color, width=lw)
+def body_lines(body, size):
+    return wrap(body, REGULAR_W, size, MAX_W - 60) if body else []
 
-def build_slide(runs, fmt="carrusel", header_left="TRABAJO EN EXCEL", header_right="SOCIAL AD",
-                cta_text=None, footer="TRABAJOENEXCEL.COM", swipe_hint=True,
-                slide_no=None, start_y=None):
+def fit_title(runs, avail_h, lh_mult):
+    """Mayor tamaño (MIN..MAX) con el que el titular cabe en avail_h y ninguna palabra desborda.
+    Si una palabra sola (p. ej. una fórmula) es más ancha que la página, baja de MIN hasta que quepa."""
+    def lay(size):
+        return [(ln, st) for t, st in runs for ln in wrap(t, BLACK_W, size, MAX_W, TRACK)]
+    for size in range(MAX_SIZE, 39, -2):
+        lines = lay(size)
+        if any(measure(ln, BLACK_W, size, TRACK) > MAX_W for ln, _ in lines):
+            continue
+        if size < MIN_SIZE or len(lines) * size * lh_mult <= avail_h:
+            return size, lines
+    return 40, lay(40)
+
+def build_slide(runs, fmt="carrusel", theme=None, body=None, cta_text=None, swipe_hint=True,
+                slide_no=None, start_y=None, header_left="TRABAJO EN EXCEL", footer="trabajoenexcel.com"):
     L = LAYOUTS[fmt]
-    T = THEMES[FORMAT_THEME[fmt]]
+    T = THEMES[theme]
     H = L["H"]
-    if start_y is None:
-        start_y = L["start_y"]
     img = Image.new("RGB", (W * S, H * S), T["bg"])
     d = ImageDraw.Draw(img)
 
-    end_y = draw_runs(d, runs, start_y, T)
-
-    # cabecera: marca con ® en superíndice + etiqueta a la derecha
+    # cabecera: marca a la izquierda, numeración a la derecha
     hy = L["header_y"]
-    x_end = draw_text(d, MARGIN, hy, header_left, BOLD_PATH, 30, T["bold"], spacing=2)
-    d.text((x_end, (hy - 14) * S), "®", font=get_font(BOLD_PATH, 18 * S), fill=T["bold"], anchor="ls")
-    draw_text(d, W - MARGIN, hy, header_right, REGULAR_PATH, 24, T["grey"], spacing=3, anchor="r")
+    draw_text(d, MARGIN, hy, header_left, SEMIBOLD_W, 26, T["text"], track=0.08)
+    if slide_no and fmt == "carrusel":
+        draw_text(d, W - MARGIN, hy, slide_no, REGULAR_W, 26, T["grey"], track=0.06, anchor="r")
 
-    # pie: línea, url y, según el formato, CTA / flecha / numeración
-    line_y = L["line_y"]
-    x2 = 380 if cta_text else 290
-    d.rectangle([MARGIN * S, (line_y - 2) * S, x2 * S, (line_y + 2) * S], fill=T["accent"])
-    draw_text(d, W - MARGIN, L["url_y"], footer, REGULAR_PATH, 22, T["grey"], spacing=2, anchor="r")
+    y0 = start_y if start_y is not None else L["start_y"]
+    bsize = 38
+    blines = body_lines(body, bsize)
+    body_h = (len(blines) * int(bsize * 1.5) + 50) if blines else 0
+    lh_mult = 1.08 if T["mark"] else 0.98
+    avail = L["pills_y"] - 70 - y0 - body_h
+    size, lines = fit_title(runs, avail, lh_mult)
+    lh = size * lh_mult
+
+    y = y0 + size * 0.9       # baseline de la primera línea (cap-height de Inter ≈ 0.73 em)
+    for ln, style in lines:
+        if style == "bold":
+            draw_text(d, MARGIN, y, ln, BLACK_W, size, T["text"], track=TRACK)
+        elif T["mark"]:
+            w = measure(ln, BLACK_W, size, TRACK)
+            pad = size * 0.16
+            d.rounded_rectangle([(MARGIN - pad) * S, (y - size * 0.84) * S, (MARGIN + w + pad) * S,
+                                 (y + size * 0.2) * S], radius=int(size * 0.3 * S), fill=T["mark"])
+            draw_text(d, MARGIN, y, ln, BLACK_W, size, T["accent"], track=TRACK)
+        else:
+            draw_text(d, MARGIN, y, ln, BLACK_W, size, T["accent"], track=TRACK)
+        y += lh
+    end_y = y - lh + size * 0.25
+
+    by = end_y + 70
+    for ln in blines:
+        draw_text(d, MARGIN, by, ln, REGULAR_W, bsize, T["grey"])
+        by += int(bsize * 1.5)
+    end_y = max(end_y, by - int(bsize * 1.5) + 12)
+
+    # botones: CTA lima (o negro sobre lima) + web; en slides intermedias, «Desliza»
+    py = L["pills_y"]
     if cta_text:
-        draw_text(d, MARGIN, L["cta_y"], cta_text, BOLD_PATH, 40, T["accent"], spacing=1)
-        if L["arrows"]:
-            arrow_icon(d, W - 160, L["cta_y"] - 25, T["accent"])
-    elif swipe_hint and L["arrows"]:
-        arrow_icon(d, W - 160, L["cta_y"] - 25, T["accent"], r=36)
-    if slide_no and L["numbering"]:
-        draw_text(d, MARGIN, L["cta_y"], slide_no, REGULAR_PATH, 22, T["grey"], spacing=2)
+        w = pill(d, MARGIN, py, cta_text, 26, T["pill_fg"], bg=T["pill_bg"])
+        pill(d, MARGIN + w + 20, py, footer, 26, T["outline_fg"], outline=T["outline"], arrow=False)
+    elif swipe_hint and fmt == "carrusel":
+        pill(d, MARGIN, py, "Desliza", 26, T["outline_fg"], outline=T["outline"])
+    else:
+        pill(d, MARGIN, py, footer, 26, T["outline_fg"], outline=T["outline"], arrow=False)
 
     return img.resize((W, H), Image.LANCZOS), end_y
+
+
+def pick_theme(fmt, i, n, sdef):
+    if sdef.get("theme"):
+        return sdef["theme"]
+    if fmt == "historia":
+        return "lima"
+    if fmt == "publicacion" or i == 1 or i == n or sdef.get("cta_text"):
+        return "negro"
+    return "tinta" if i % 2 == 0 else "negro"   # intermedias: tinta en 2, 4...; negro en 3, 5...
+
 
 def main():
     sys.stdout.reconfigure(encoding="utf-8")
@@ -180,12 +226,13 @@ def main():
     H = LAYOUTS[args.fmt]["H"]
     for i, sdef in enumerate(slides, start=1):
         runs = [tuple(r) for r in sdef["runs"]]
-        kwargs = {k: v for k, v in sdef.items() if k != "runs"}
-        img, end_y = build_slide(runs, fmt=args.fmt, **kwargs)
+        kwargs = {k: v for k, v in sdef.items() if k not in ("runs", "theme")}
+        theme = pick_theme(args.fmt, i, len(slides), sdef)
+        img, end_y = build_slide(runs, fmt=args.fmt, theme=theme, **kwargs)
         name = f"slide-{i:02d}.jpg"
         img.save(out / name, "JPEG", quality=95)
-        overflow = " ⚠ POSIBLE OVERFLOW (ajusta start_y o acorta el texto)" if end_y > LAYOUTS[args.fmt]["limit"] else ""
-        print(f"{name}  {img.width}x{H}  (texto termina en y={end_y}){overflow}")
+        overflow = " ⚠ POSIBLE OVERFLOW (acorta el texto)" if end_y > LAYOUTS[args.fmt]["limit"] else ""
+        print(f"{name}  {img.width}x{H}  tema={theme}  (texto termina en y={end_y:.0f}){overflow}")
 
 if __name__ == "__main__":
     main()

@@ -1,71 +1,44 @@
-# Guía de estilo — carruseles trabajoenexcel.com
+# Guía de estilo — Instagram trabajoenexcel.com
 
-## Patrón visual (inspirado en Much Media, adaptado a la marca)
-Fondo sólido + tipografía condensada bold en mayúsculas + una frase corta en
-itálica de acento como "punchline" + línea divisora fina + ícono de flecha en
-círculo + marca en cabecera/pie. Editorial, minimalista, mucho espacio en
-blanco arriba y abajo del bloque de texto.
+## Patrón visual: «dark editorial»
+Casi todo es tipografía y un solo color de acento. Titular gigante en Black con tracking
+apretado (-2 %) e interlínea ~0,98, alineado a la izquierda; una frase de acento en lima;
+párrafo opcional en gris; botones en píldora (CTA relleno + web con contorno). Sin iconos,
+fotos, degradados ni sombras. Lo genera `scripts/carousel_gen.py`; no hay que elegir el tema
+salvo con `"theme"`.
 
-## Paleta (aproximación verificada por el usuario como "verde bosque + crema")
-- Fondo: `#F4EFE1` (cream/hueso)
-- Texto principal: `#182A20` (casi negro, tono verde oscuro)
-- Acento (itálica, líneas, ícono, CTA): `#2F6B47` (verde bosque)
-- Texto secundario/footer: `#8A9088` (gris)
+## Paleta
+| Rol | Hex |
+|---|---|
+| Fondo negro | `#0A0A0A` |
+| Fondo verde tinta | `#1A2410` |
+| Fondo / acento lima | `#D4FF3F` |
+| Texto principal | `#F5F5F5` |
+| Texto secundario | `#C7C7C7` |
+| Borde de píldora | `#5F5F5F` |
 
-⚠️ Este hex es una aproximación de diseño, no extraído verificado del CSS del
-sitio (el fetch no expone estilos). Si el usuario da en algún momento un hex
-oficial de marca, actualiza esta tabla inmediatamente y trátalo como el
-estándar desde ese momento.
+El lima se usa poco: la frase de acento y el botón. Aprox. de una referencia de diseño del
+usuario (hero oscuro con acento lima), medida en píxeles.
 
-## Tema verde (publicación e historia)
-El carrusel usa la paleta crema de arriba. La **publicación** y la **historia** usan otro
-tema, para que los mensajes de la semana se distingan a simple vista (lo aplica el script
-según `--format`, no hay que elegirlo):
-- Fondo: `#2F6B47` (el verde de acento)
-- Texto bold e itálica, marca, línea y CTA: `#FFFFFF` (blanco)
-- Texto secundario (etiqueta y URL del pie): `#B9D3C4` (verde claro)
+## Fondos por formato
+- **carrusel** (1080x1350): portada y CTA final en negro; intermedias alternando tinta (slides
+  2, 4…) y negro (3, 5…). `"theme": "lima"` en una slide intermedia da un golpe de ritmo (máx. 1-2).
+- **publicacion** (1080x1350): negro.
+- **historia** (1080x1920): lima con texto negro; la frase de acento va en blanco sobre píldora negra.
+  Márgenes de seguridad: Instagram tapa ~250 px arriba y abajo; cabecera en y=300 y botones
+  por encima de y≈1620. Una sola imagen sin caption: debe leerse en segundos.
 
 ## Tipografía
-Fuentes incluidas en `assets/fonts/` (sin depender de Canva, de internet ni de
-fuentes del sistema):
-- Bold/mayúsculas: `DejaVu Sans Condensed` bold
-- Texto secundario (cabecera derecha, numeración, pie): `DejaVu Sans Condensed` regular
-- Itálica de acento: `DejaVu Serif Condensed` bold italic
+`assets/fonts/InterTight-Variable.ttf` (Inter Tight, licencia OFL). Titular Black (900),
+párrafo Regular (400), botones y marca SemiBold (600). El tamaño del titular se ajusta solo
+(168-84 px) para llenar el espacio; si ni a 84 px cabe, el script avisa con
+«⚠ POSIBLE OVERFLOW» y hay que acortar el copy.
 
-Alternativas comunes si se quiere replicar en Canva/Figma más adelante:
-- Bold condensada: **Oswald** (o Bebas Neue / Anton para más impacto)
-- Itálica de acento: **Playfair Display** bold italic
-
-## Estructura de cada slide
-1. Header: `TRABAJO EN EXCEL®` (izq) / `SOCIAL AD` (der), pequeño, letter-spacing.
-2. Bloque de texto principal, empieza ~y=460–560 según cuánto texto tenga:
-   - 1-2 líneas bold en mayúsculas (la idea)
-   - 1 línea itálica en verde (el "punch" — la frase que se recuerda)
-   - opcional: 1 línea bold más cerrando la idea
-3. Footer: línea divisora fina verde + `TRABAJOENEXCEL.COM` (der).
-4. Esquina inferior derecha: ícono de flecha en círculo (indicador de swipe)
-   en todos los slides excepto el último, que en su lugar lleva el CTA_TEXT
-   + el mismo ícono.
-5. Esquina inferior izquierda: numeración `01 / 0N` en todos menos el CTA.
-
-## Reglas de contenido (heredadas del sistema de carruseles)
-- 4 a 9 slides. Slide 1 = hook específico (nunca genérico). Última = CTA con
-  fórmula "[Acción concreta] en trabajoenexcel.com" (el `cta_text` ≤ 28
-  caracteres para no chocar con la flecha) — nunca "sígueme" ni "Comenta [PALABRA]
-  y te dejo el link" (ver la restricción de CTA en `urls.md`).
-- Una idea por slide. Si un slide no avanza la idea, no va.
-- Progresión lógica: cada slide construye sobre el anterior.
-
-## Anti-overflow (lección aprendida — no repetir el error)
-NUNCA escribas saltos de línea a mano adivinando dónde corta el texto. El
-script mide el ancho real con la fuente exacta (Pillow + `getbbox`) y hace
-wrap automático. Si un slide queda muy denso (el script avisa con
-"⚠ POSIBLE OVERFLOW"), la solución es acortar el copy o subir `start_y`, no
-forzar el tamaño de fuente hacia abajo (rompe la jerarquía visual).
-
-## Formatos
-- **carrusel** (crema) y **publicacion** (verde, letra blanca): 1080x1350 (4:5). La publicación va sin flecha de deslizar
-  ni numeración; el CTA (`cta_text`) va abajo a la izquierda.
-- **historia** (verde, letra blanca): 1080x1920 (9:16). Instagram superpone su interfaz en los ~250 px de arriba
-  y de abajo: cabecera en y=300, texto desde y≈760 y pie/CTA por encima de y≈1620. Sin flecha.
-  Es una sola imagen sin caption: el mensaje va entero en la imagen y debe leerse en segundos.
+## Copy
+- Frase completa con punto final, en minúsculas normales (no mayúsculas). Tono afirmativo.
+- `runs`: `"bold"` = titular blanco; `"italic"` = frase de acento (ya no es cursiva).
+- `body` (opcional): 1-2 líneas de apoyo en gris.
+- `cta_text` (≤ 28 caracteres): «Haz el test gratis»; la píldora añade la flecha y al lado la web.
+- 3-5 slides por carrusel; una idea por slide; slide 1 = hook específico; última = CTA con
+  acción concreta + trabajoenexcel.com (nunca «sígueme» ni «comenta X»; ver `urls.md`).
+- Sin saltos de línea a mano: el script hace el wrap midiendo la fuente real.

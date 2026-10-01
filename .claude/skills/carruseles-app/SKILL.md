@@ -15,9 +15,9 @@ para su tipo y borra las imágenes.
 
 | Tipo (`kind`) | Qué es | Imagen | Texto de publicación |
 |---|---|---|---|
-| `carrusel` | 3–5 slides que promocionan una URL (servicios) | 1080x1350 (4:5), `--format carrusel`, fondo crema y letra oscura | caption + hashtags |
-| `publicacion` | 1 sola imagen: **un truco o dato útil de Excel**, con la web al final | 1080x1350 (4:5), `--format publicacion`, **fondo verde y letra blanca** | caption + hashtags |
-| `historia` | 1 sola imagen: **promoción breve** de una URL | 1080x1920 (9:16), `--format historia`, **fondo verde y letra blanca** | **ninguno** |
+| `carrusel` | 3–5 slides que promocionan una URL (servicios) | 1080x1350 (4:5), `--format carrusel`, fondo negro / verde tinta (portada y CTA en negro) | caption + hashtags |
+| `publicacion` | 1 sola imagen: **un truco o dato útil de Excel**, con la web al final | 1080x1350 (4:5), `--format publicacion`, **fondo negro** | caption + hashtags |
+| `historia` | 1 sola imagen: **promoción breve** de una URL | 1080x1920 (9:16), `--format historia`, **fondo lima y letra negra** | **ninguno** |
 
 Las historias por API son solo una imagen: no admiten stickers, enlaces, encuestas
 ni texto de publicación, y duran 24 horas. **Todo el mensaje va dentro de la imagen**
@@ -68,12 +68,12 @@ dolor, la keyword SEO y el CTA verificados de cada página (si difieren, manda l
 página). No inventes dolor genérico ni cifras que no estén en ninguna de las dos.
 
 ### 3. Escribir el copy de cada slide
-Estructura por slide: `runs` = lista de (texto, "bold"|"italic").
-- Slide 1: hook específico, 1-2 líneas bold + remate en itálica.
+Estructura por slide: `runs` = lista de (texto, "bold"|"italic"); `bold` = titular blanco, `italic` = frase de acento en lima; texto en minúsculas normales, no en mayúsculas; `body` opcional = párrafo en gris.
+- Slide 1: hook específico, 1-2 líneas bold + remate de acento.
 - Slides intermedios: una idea cada uno, con progresión lógica.
 - Slide final: SIEMPRE termina con el CTA de `references/urls.md` para esa URL
-  (acción concreta + trabajoenexcel.com). Lleva `"cta_text"` (frase corta, en
-  mayúsculas, máx. 28 caracteres) y `"swipe_hint": false`. Respeta la sección
+  (acción concreta + trabajoenexcel.com). Lleva `"cta_text"` (frase corta,
+  máx. 28 caracteres) y `"swipe_hint": false`. Respeta la sección
   «Restricciones» de más abajo.
 - Todos los slides salvo el último llevan `"slide_no": "0N / 0T"`.
 
@@ -84,13 +84,12 @@ Si el truco lleva un atajo de teclado, lee antes `references/trucos-excel.md`: l
 atajos Ctrl+letra no siempre coinciden entre el inglés y el español (público
 España/LATAM), y ahí se registran las correcciones ya detectadas. Si el atajo no
 está verificado ahí, usa un truco que no dependa de un atajo de teclado.
-Una sola imagen: gancho en bold (el truco) + remate en itálica (por qué importa), y
-`"cta_text"` tipo «MÁS EN TRABAJOENEXCEL.COM» (máx. 28 caracteres). Sin `slide_no`.
+Una sola imagen: gancho en bold (el truco) + remate de acento (por qué importa), y
+`"cta_text"` tipo «Más en trabajoenexcel.com» (máx. 28 caracteres). Sin `slide_no`.
 `source_url`: `https://www.trabajoenexcel.com/`.
 
 **Historia** (`historia`): una sola imagen 9:16 con la promoción breve de una URL:
-gancho corto en bold + remate en itálica + `"cta_text"` con la acción («HAZ EL TEST
-GRATIS.»). Máximo unas 3-4 líneas de texto en total: se lee en 5 segundos. Sin caption.
+gancho corto en bold + remate de acento + `"cta_text"` con la acción («Haz el test gratis»). Máximo unas 3-4 líneas de texto en total: se lee en 5 segundos. Sin caption.
 
 No escribas saltos de línea a mano: el script hace wrap midiendo la fuente real
 (ver la sección anti-overflow de `references/style-guide.md`).
