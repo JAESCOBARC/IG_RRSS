@@ -130,4 +130,4 @@ borrado de imágenes, ocultación de credenciales en errores, renovación de tok
 | `c4dcd6a` | `tick.yml` pasa a respaldo (cron desplazado a `:12`/`:42`); cron-job.org (10 min) documentado como vía primaria tras el retraso de horas del cron de GitHub el 22 sep |
 | `2627689` | **Rediseño visual**: estilo oscuro con acento lima (`#D4FF3F`), Inter Tight Black, botones en píldora. Carrusel negro/verde tinta, publicación negra, historia lima. Solo probado en local con muestras (imágenes revisadas a ojo); sin subir como borrador a la app ni probado en la rutina de la nube |
 | `f4d6f80` | Regla de ortografía y mayúsculas en la skill, panel **URLs** editable (`/api/urls`) y botón **Publicar ahora** |
-| _(este commit)_ | La historia vuelve a fondo lima con letra negra (se probó verde tinta y se descartó) |
+| `f90f05e` | La historia vuelve a fondo lima con letra negra (se probó verde tinta y se descartó) |
