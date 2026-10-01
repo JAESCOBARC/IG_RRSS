@@ -55,6 +55,10 @@ cualquier texto que incumpla esto. Si un carrusel lo incumple, no se publica.
   léelas con `python scripts/pick_urls.py 99` (sin conexión usa `app/url.txt`). Si el usuario no especifica cuál, y no hay contexto para inferirlo,
   pregunta con opciones sacadas de ese archivo. Si menciona una URL de
   trabajoenexcel.com que no está en la lista, úsala igualmente.
+- **Lectura obligatoria de la página:** el tema de CADA post sale de la página real de la URL (las del
+  panel, incluidas las que el usuario acabe de añadir), aunque la URL esté en `references/urls.md`: ese
+  archivo es solo apoyo. Si no puedes abrir la página (red bloqueada, error), **no generes ese post
+  con datos de memoria ni lo cambies por otra URL sin avisar**: dile al usuario qué URL falló y por qué.
 - **Tema:** haz `WebFetch` de la URL elegida y extrae de la página real el dolor,
   la keyword y la oferta. No te bases solo en memoria.
 - **Objetivo (alcance / conexión / venta):** si no lo dice, infiérelo del
