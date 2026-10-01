@@ -88,7 +88,7 @@ borrado de imágenes, ocultación de credenciales en errores, renovación de tok
 | Límites de los planes gratuitos | Render gratuito: se duerme (~1 min de despertar) y su documentación desaconseja producción; Neon: sin comprobar cuotas |
 | GitHub desactiva workflows programados tras 60 días sin actividad | El workflow intenta reactivarse solo; sin verificar |
 | **Usuarios y programación editable** (versión 3) | Solo probados en local (SQLite). Sin desplegar ni probar en Render/Neon (Postgres): tras desplegar, comprobar que crea las tablas, que siembra la programación y que el primer hueco real publica |
-| **URLs editables y «Publicar ahora»** (versión 4) | Probados en local (SQLite, 87 pruebas). Sin desplegar ni probar en Render/Neon: tras desplegar, comprobar que crea la tabla `source_urls`, que siembra las URLs y que «Publicar ahora» publica de verdad (es una publicación real) |
+| ~~URLs editables y «Publicar ahora»~~ (versión 4) | **Verificado en producción** (Render/Neon) por el usuario: el panel de URLs y «Publicar ahora» funcionan |
 | Repo dentro de OneDrive | Riesgo de conflictos de sincronización con `.git`; recomendado moverlo fuera |
 
 ## 8. Decisiones de diseño (y por qué)
@@ -128,6 +128,6 @@ borrado de imágenes, ocultación de credenciales en errores, renovación de tok
 | `0863b58` | `.claude/settings.json` deja de versionarse |
 | `4ce02c3` | **Tres tipos** (carrusel, publicación, historia), horarios por tipo, generador `--format`, migración de la BD |
 | `c4dcd6a` | `tick.yml` pasa a respaldo (cron desplazado a `:12`/`:42`); cron-job.org (10 min) documentado como vía primaria tras el retraso de horas del cron de GitHub el 22 sep |
-| `2627689` | **Rediseño visual**: estilo oscuro con acento lima (`#D4FF3F`), Inter Tight Black, botones en píldora. Carrusel negro/verde tinta, publicación negra, historia lima. Solo probado en local con muestras (imágenes revisadas a ojo); sin subir como borrador a la app ni probado en la rutina de la nube |
+| `2627689` | **Rediseño visual**: estilo oscuro con acento lima (`#D4FF3F`), Inter Tight Black, botones en píldora. Carrusel negro/verde tinta, publicación negra, historia lima. Verificado por el usuario: la rutina de la nube, con la red permitida para trabajoenexcel.com, lee las páginas y genera la tanda con el diseño nuevo; los borradores se ven bien en el panel |
 | `f4d6f80` | Regla de ortografía y mayúsculas en la skill, panel **URLs** editable (`/api/urls`) y botón **Publicar ahora** |
 | `f90f05e` | La historia vuelve a fondo lima con letra negra (se probó verde tinta y se descartó) |
