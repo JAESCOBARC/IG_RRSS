@@ -18,9 +18,9 @@ GitHub Actions (cada 30 min)  ──▶  ¿hueco de la programación?  ──▶
 | Programador (avisa a la app cada 30 min) | [`.github/workflows/tick.yml`](.github/workflows/tick.yml) |
 | Despliegue en Render | [`render.yaml`](render.yaml) |
 | Generador de carruseles y reglas de copy | [`.claude/skills/carruseles-app/`](.claude/skills/carruseles-app/SKILL.md) |
-| Páginas a promocionar | [`url.txt`](url.txt) |
+| Páginas a promocionar | Se editan en el panel (URLs); [`app/url.txt`](app/url.txt) es solo la lista inicial |
 | Subir un borrador a la app | [`scripts/upload_draft.py`](scripts/upload_draft.py) |
-| Elegir URLs al azar de url.txt para la tanda semanal | [`scripts/pick_urls.py`](scripts/pick_urls.py) |
+| Elegir URLs al azar (de las del panel) para la tanda semanal | [`scripts/pick_urls.py`](scripts/pick_urls.py) |
 
 ## Uso
 1. Cada lunes, la rutina programada de Claude en la nube genera 3 borradores (un carrusel, una
@@ -38,7 +38,7 @@ Estado, pruebas realizadas y pendientes: [`STATUS.md`](STATUS.md).
 ```
 pip install -r requirements.txt
 python scripts/upload_draft.py --recent          # posts recientes de la app (necesita .env)
-python scripts/pick_urls.py 3                    # 3 URLs al azar de url.txt
+python scripts/pick_urls.py 3                    # 3 URLs al azar de las del panel (o de app/url.txt)
 cd app && python -m unittest -v                  # pruebas de la app
 ```
 El `.env` (ignorado por git) lleva `IG_APP_URL` e `IG_APP_API_KEY`.

@@ -112,6 +112,14 @@
     </label>
     <button class="btn primary" type="submit" {% if violations %}disabled{% endif %}>Aprobar y poner en cola</button>
   </form>
+  <form method="post" action="{{ url_for('publish_now', pid=post.id) }}" class="publish-now">
+    <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+    <label class="check">
+      <input type="checkbox" name="confirm" required {% if violations %}disabled{% endif %}>
+      Publicar ahora mismo en Instagram, sin esperar al hueco. Es inmediato y no se puede deshacer desde aquí.
+    </label>
+    <button class="btn" type="submit" {% if violations %}disabled{% endif %}>Publicar ahora</button>
+  </form>
   <form method="post" action="{{ url_for('reject', pid=post.id) }}">
     <input type="hidden" name="csrf" value="{{ csrf_token() }}">
     <button class="btn" type="submit">Rechazar y borrar imágenes</button>
@@ -122,6 +130,14 @@
   <form method="post" action="{{ url_for('unqueue', pid=post.id) }}">
     <input type="hidden" name="csrf" value="{{ csrf_token() }}">
     <button class="btn" type="submit">Sacar de la cola</button>
+  </form>
+  <form method="post" action="{{ url_for('publish_now', pid=post.id) }}" class="publish-now">
+    <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+    <label class="check">
+      <input type="checkbox" name="confirm" required {% if violations %}disabled{% endif %}>
+      Publicar ahora mismo en Instagram, sin esperar al hueco. Es inmediato y no se puede deshacer desde aquí.
+    </label>
+    <button class="btn" type="submit" {% if violations %}disabled{% endif %}>Publicar ahora</button>
   </form>
   <form method="post" action="{{ url_for('reject', pid=post.id) }}">
     <input type="hidden" name="csrf" value="{{ csrf_token() }}">

@@ -25,6 +25,17 @@ El panel es multiusuario. Un **administrador** crea y elimina cuentas en **Usuar
   el administrador borra la cuenta y la crea de nuevo.
 - Los posts aprobados guardan quién los aprobó.
 
+## URLs a promocionar
+En **URLs** (menú superior, solo administradores) se añaden, modifican y eliminan las páginas de trabajoenexcel.com
+de las que sale el tema de cada post. Solo se admiten URLs `https` de `trabajoenexcel.com`. La primera vez se copian
+de `url.txt`; después manda la base de datos. La tanda semanal las lee por `GET /api/urls` (con la clave de la API) a
+través de `scripts/pick_urls.py`.
+
+## Publicar ahora
+En cada post en borrador o en cola, el botón **Publicar ahora** (con casilla de confirmación) lo publica al momento,
+sin esperar al hueco y sin gastar ninguno. Un post fallido no se puede publicar así: primero se comprueba el perfil de
+Instagram y se reabre como borrador.
+
 ## Programación
 Se edita en el panel (**Programación**, solo administradores): añadir o eliminar huecos «día, hora, tipo»,
 la zona horaria y la tolerancia. Los cambios valen desde el siguiente aviso del programador, sin redesplegar.

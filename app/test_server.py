@@ -26,6 +26,7 @@ import guards  # noqa: E402
 import instagram  # noqa: E402
 import schedule  # noqa: E402
 import server  # noqa: E402
+import urls_store  # noqa: E402
 from PIL import Image  # noqa: E402
 
 API = {"Authorization": "Bearer api-key-de-prueba"}
@@ -79,6 +80,7 @@ class Base(unittest.TestCase):
             db.execute(conn, "DELETE FROM kv")
             db.execute(conn, "DELETE FROM users")
             db.execute(conn, "DELETE FROM schedule_slots")
+            db.execute(conn, "DELETE FROM source_urls")
         server._attempts.clear()  # el límite de intentos de login es global: que no pase de una prueba a otra
         self.client = server.app.test_client()
         self._publish, self._refresh, self._utcnow = instagram.publish, instagram.refresh, server.utcnow
@@ -887,6 +889,196 @@ class TokenTests(Base):
         with db.connect() as conn:
             server.maybe_refresh_token(conn)  # refresh lanza IGError; no debe propagarse
             self.assertEqual(server.get_token(conn), "IGAA-TOKEN-SECRETO-DE-PRUEBA")
+
+
+class PublishNowTests(Base):
+    """Botón «Publicar ahora»: publicación inmediata, sin esperar al hueco."""
+
+    def fake_publish(self, calls=None):
+        def fake(urls, caption, user_id, token, **kw):
+            if calls is not None:
+                calls.append(urls)
+            return {"media_id": "123", "permalink": "https://www.instagram.com/p/XYZ/"}
+        instagram.publish = fake
+
+    def publish_now(self, pid, confirm=True):
+        self.login()
+        data = {"csrf": self.csrf()}
+        if confirm:
+            data["confirm"] = "on"
+        return self.client.post(f"/post/{pid}/publish-now", data=data)
+
+    def test_borrador_se_publica_al_momento_y_borra_imagenes(self):
+        pid = self.draft()
+        calls = []
+        self.fake_publish(calls)
+        self.assertEqual(self.publish_now(pid).status_code, 302)
+        self.wait_for(pid, {"published"})
+        post = self.status(pid)
+        self.assertEqual(post["permalink"], "https://www.instagram.com/p/XYZ/")
+        self.assertEqual(post["approved_by"], "admin")
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(self.n_images(pid), 0)
+
+    def test_post_en_cola_tambien_y_no_gasta_hueco(self):
+        a, b = self.draft(title="A"), self.draft(title="B")
+        self.fake_publish()
+        self.approve(a)
+        self.approve(b)
+        self.publish_now(b)
+        self.wait_for(b, {"published"})
+        self.assertEqual(self.status(a)["status"], "approved")
+        self.assertEqual(self.tick(TUE_SLOT).get_json()["post_id"], a)  # el hueco seguía libre
+        self.wait_for(a, {"published"})
+
+    def test_sin_confirmar_no_publica(self):
+        pid = self.draft()
+        calls = []
+        self.fake_publish(calls)
+        self.publish_now(pid, confirm=False)
+        time.sleep(0.2)
+        self.assertEqual(self.status(pid)["status"], "draft")
+        self.assertFalse(calls)
+
+    def test_no_publica_dos_veces_ni_estados_no_permitidos(self):
+        pid = self.draft()
+        calls = []
+        self.fake_publish(calls)
+        self.publish_now(pid)
+        self.wait_for(pid, {"published"})
+        self.publish_now(pid)  # ya publicado
+        failed = self.draft(title="F")
+        with db.connect() as conn:
+            db.execute(conn, "UPDATE posts SET status = 'failed' WHERE id = %s", (failed,))
+        self.publish_now(failed)  # un fallido no se reintenta a ciegas
+        time.sleep(0.2)
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(self.status(failed)["status"], "failed")
+
+    def test_contenido_prohibido_no_se_publica(self):
+        pid = self.draft()
+        with db.connect() as conn:
+            db.execute(conn, "UPDATE posts SET caption = %s WHERE id = %s", ("Comenta NIVEL y te dejo el link", pid))
+        calls = []
+        self.fake_publish(calls)
+        self.publish_now(pid)
+        time.sleep(0.2)
+        self.assertEqual(self.status(pid)["status"], "draft")
+        self.assertFalse(calls)
+
+    def test_exige_sesion_y_csrf(self):
+        pid = self.draft()
+        self.assertEqual(self.client.post(f"/post/{pid}/publish-now", data={"confirm": "on"}).status_code, 302)
+        self.login()
+        self.assertEqual(self.client.post(f"/post/{pid}/publish-now", data={"confirm": "on"}).status_code, 400)
+        self.assertEqual(self.status(pid)["status"], "draft")
+
+    def test_el_boton_aparece_en_borrador_y_cola_pero_no_en_publicados(self):
+        pid = self.draft()
+        self.login()
+        self.assertIn("Publicar ahora", self.client.get(f"/post/{pid}").get_data(as_text=True))
+        self.approve(pid)
+        self.assertIn("Publicar ahora", self.client.get(f"/post/{pid}").get_data(as_text=True))
+        with db.connect() as conn:
+            db.execute(conn, "UPDATE posts SET status = 'published' WHERE id = %s", (pid,))
+        self.assertNotIn("Publicar ahora", self.client.get(f"/post/{pid}").get_data(as_text=True))
+
+
+class UrlsTests(Base):
+    """URLs a promocionar: se editan desde el panel y la API las sirve."""
+
+    def setUp(self):
+        super().setUp()
+        self._url_file = urls_store.URL_FILE
+        self.seed = os.path.join(_TMP, "url_inicial.txt")
+        with open(self.seed, "w", encoding="utf-8") as f:
+            f.write("https://www.trabajoenexcel.com/\n# comentario\nhttps://www.trabajoenexcel.com/test-nivel-excel.html\n"
+                    "https://www.trabajoenexcel.com/\n")
+        urls_store.URL_FILE = __import__("pathlib").Path(self.seed)
+
+    def tearDown(self):
+        urls_store.URL_FILE = self._url_file
+        super().tearDown()
+
+    def urls(self):
+        with db.connect() as conn:
+            return [r["url"] for r in urls_store.list_urls(conn)]
+
+    def act(self, path, **data):
+        self.login()
+        return self.client.post(path, data={"csrf": self.csrf(), **data})
+
+    def row_id(self, url):
+        with db.connect() as conn:
+            return db.one(conn, "SELECT id FROM source_urls WHERE url = %s", (url,))["id"]
+
+    def test_primera_carga_copia_url_txt_sin_duplicados_ni_comentarios(self):
+        self.assertEqual(self.urls(), ["https://www.trabajoenexcel.com/",
+                                       "https://www.trabajoenexcel.com/test-nivel-excel.html"])
+
+    def test_manda_la_base_de_datos_no_el_archivo(self):
+        self.urls()
+        with open(self.seed, "w", encoding="utf-8") as f:
+            f.write("https://www.trabajoenexcel.com/otra.html\n")
+        self.assertEqual(len(self.urls()), 2)
+
+    def test_pagina_y_api(self):
+        self.login()
+        html = self.client.get("/admin/urls").get_data(as_text=True)
+        self.assertIn("test-nivel-excel.html", html)
+        self.assertEqual(self.client.get("/api/urls").status_code, 401)
+        r = self.client.get("/api/urls", headers=API)
+        self.assertEqual(r.get_json(), self.urls())
+
+    def test_anadir_modificar_y_borrar(self):
+        self.act("/admin/urls", url="https://www.trabajoenexcel.com/nueva.html")
+        self.assertIn("https://www.trabajoenexcel.com/nueva.html", self.urls())
+        uid = self.row_id("https://www.trabajoenexcel.com/nueva.html")
+        self.act(f"/admin/urls/{uid}/update", url="https://trabajoenexcel.com/editada.html")
+        self.assertIn("https://trabajoenexcel.com/editada.html", self.urls())
+        self.assertNotIn("https://www.trabajoenexcel.com/nueva.html", self.urls())
+        self.act(f"/admin/urls/{uid}/delete")
+        self.assertNotIn("https://trabajoenexcel.com/editada.html", self.urls())
+        self.assertEqual(len(self.urls()), 2)
+
+    def test_la_api_refleja_los_cambios(self):
+        self.urls()
+        for url in self.urls():
+            self.act(f"/admin/urls/{self.row_id(url)}/delete")
+        self.assertEqual(self.client.get("/api/urls", headers=API).get_json(), [])
+        self.act("/admin/urls", url="https://www.trabajoenexcel.com/solo-esta.html")
+        self.assertEqual(self.client.get("/api/urls", headers=API).get_json(),
+                         ["https://www.trabajoenexcel.com/solo-esta.html"])
+
+    def test_rechaza_urls_no_validas_o_repetidas(self):
+        base = self.urls()
+        for bad in ["", "no es una url", "http://www.trabajoenexcel.com/x", "https://otra-web.com/x",
+                    "https://trabajoenexcel.com.evil.com/x", "javascript:alert(1)", "https://www.trabajoenexcel.com/a b",
+                    "https://www.trabajoenexcel.com/" + "a" * 300, "https://www.trabajoenexcel.com/"]:
+            self.act("/admin/urls", url=bad)
+        self.assertEqual(self.urls(), base)
+        uid = self.row_id("https://www.trabajoenexcel.com/test-nivel-excel.html")
+        self.act(f"/admin/urls/{uid}/update", url="https://www.trabajoenexcel.com/")  # choca con otra
+        self.assertEqual(self.urls(), base)
+
+    def test_solo_administradores_y_con_csrf(self):
+        self.login()
+        client = server.app.test_client()
+        self.assertEqual(client.get("/admin/urls").status_code, 302)
+        self.assertEqual(self.client.post("/admin/urls", data={"url": "https://www.trabajoenexcel.com/x.html"}).status_code, 400)
+        with db.connect() as conn:
+            from accounts import create
+            create(conn, "editora", "clave-larga-1", "editor", "admin")
+        editor = server.app.test_client()
+        editor.get("/login")
+        with editor.session_transaction() as sess:
+            token = sess["csrf"]
+        editor.post("/login", data={"username": "editora", "password": "clave-larga-1", "csrf": token})
+        self.assertEqual(editor.get("/admin/urls").status_code, 403)
+
+    def test_enlace_en_el_menu_solo_para_admin(self):
+        self.login()
+        self.assertIn("/admin/urls", self.client.get("/").get_data(as_text=True))
 
 
 class GuardTests(unittest.TestCase):

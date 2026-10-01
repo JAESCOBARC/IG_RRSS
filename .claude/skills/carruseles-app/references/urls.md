@@ -1,9 +1,9 @@
 # Las 3 URLs objetivo — ángulos ya extraídos
 
-Las URLs a promocionar están en `url.txt` (raíz del repo). Estos ángulos son
+Las URLs a promocionar están en la app (panel → URLs). Estos ángulos son
 una referencia ya verificada; el tema de cada carrusel se saca de la página
-real (`WebFetch` de la URL de `url.txt`) y, si algo difiere, manda la página.
-Si `url.txt` incluye una URL que no está aquí (hay más URLs en `url.txt` que
+real (`WebFetch` de la URL) y, si algo difiere, manda la página.
+Si la lista de la app incluye una URL que no está aquí (puede haber más URLs que
 ángulos verificados en este archivo), extrae dolor/keyword/CTA de la página real con
 el mismo criterio y úsalos en el momento. Trabajando en local con el usuario, puedes
 ofrecerle añadirla a este archivo; en la rutina semanal no modifiques archivos.

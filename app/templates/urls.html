@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}URLs{% endblock %}
+{% block content %}
+<p><a class="back" href="{{ url_for('index') }}">← Volver</a></p>
+<h1>URLs a promocionar</h1>
+<p class="muted">Páginas de trabajoenexcel.com de las que sale el tema de cada post. La tanda semanal sortea de esta lista, sin repetir temas recientes. Solo se admiten URLs https de trabajoenexcel.com.</p>
+
+<section class="card">
+  <h2>Lista actual <span class="count">{{ urls|length }}</span></h2>
+  {% if urls %}
+  {% for u in urls %}
+  <div class="url-row">
+    <form method="post" action="{{ url_for('urls_update', uid=u.id) }}" class="row">
+      <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+      <div>
+        <label class="sr" for="url-{{ u.id }}">URL</label>
+        <input id="url-{{ u.id }}" name="url" type="url" value="{{ u.url }}" maxlength="300" autocapitalize="none" spellcheck="false" required>
+      </div>
+      <button class="btn small" type="submit">Guardar</button>
+    </form>
+    <form method="post" action="{{ url_for('urls_delete', uid=u.id) }}">
+      <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+      <button class="btn small danger" type="submit">Eliminar</button>
+    </form>
+  </div>
+  {% endfor %}
+  {% else %}
+  <p class="notice">No hay ninguna URL: la tanda semanal no podrá elegir tema hasta que añadas una.</p>
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2>Añadir URL</h2>
+  <form method="post" action="{{ url_for('urls_add') }}" class="row">
+    <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+    <div>
+      <label for="new-url">URL</label>
+      <input id="new-url" name="url" type="url" placeholder="https://www.trabajoenexcel.com/…" maxlength="300" autocapitalize="none" spellcheck="false" required>
+    </div>
+    <button class="btn primary" type="submit">Añadir</button>
+  </form>
+  <p class="muted small">Una URL nueva no tiene ángulos verificados en la skill: Claude leerá la página real para sacar el tema.</p>
+</section>
+{% endblock %}

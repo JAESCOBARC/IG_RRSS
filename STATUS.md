@@ -24,13 +24,15 @@ del servidor al publicar (o al rechazar) y del equipo al subirlas.
 | Generación semanal | Rutina de Claude en la nube (lunes 08:02 Madrid) | Sin conectores; entorno «Default» con `IG_APP_URL` + credencial de API |
 | Generador de imágenes y reglas de copy | `.claude/skills/carruseles-app/` | Pillow, fuente Inter Tight incluida; estilo «dark editorial» (negro, verde tinta y lima; ver `references/style-guide.md`) |
 | Subida de borradores desde Claude | `scripts/upload_draft.py`, `scripts/pick_urls.py` | Se ejecutan desde local o desde la rutina |
+| URLs a promocionar | Panel → URLs (base de datos, tabla `source_urls`) | Se siembran de `app/url.txt` la primera vez; Claude las lee por `GET /api/urls` (`scripts/pick_urls.py`, con respaldo en `app/url.txt`) |
 | Horarios | Panel → Programación (base de datos) | `app/schedule.txt` solo es la programación inicial (se copia una vez) |
+| Publicación inmediata | Botón «Publicar ahora» en cada post en borrador o en cola | Con casilla de confirmación; no gasta hueco; un fallido no se puede publicar así |
 | Usuarios | Panel → Usuarios (base de datos) | Roles `admin` y `editor`; cuenta integrada `admin` = `ADMIN_PASSWORD` |
 
 ## 3. Tipos de contenido
 | Tipo | Imágenes | Proporción | Texto de publicación | Contenido |
 |---|---|---|---|---|
-| `carrusel` | 2–10 (skill: 3–5) | 4:5 a 1,91:1 (1080×1350) | caption + hashtags | Servicios, sobre una URL de `url.txt` |
+| `carrusel` | 2–10 (skill: 3–5) | 4:5 a 1,91:1 (1080×1350) | caption + hashtags | Servicios, sobre una URL de la lista del panel |
 | `publicacion` | 1 | 4:5 a 1,91:1 (1080×1350) | caption + hashtags | Truco o dato útil de Excel, con la web |
 | `historia` | 1 | 9:16 (1080×1920) | **ninguno** (la API no lo admite) | Promoción breve de una URL; se ve 24 h |
 
@@ -86,6 +88,7 @@ borrado de imágenes, ocultación de credenciales en errores, renovación de tok
 | Límites de los planes gratuitos | Render gratuito: se duerme (~1 min de despertar) y su documentación desaconseja producción; Neon: sin comprobar cuotas |
 | GitHub desactiva workflows programados tras 60 días sin actividad | El workflow intenta reactivarse solo; sin verificar |
 | **Usuarios y programación editable** (versión 3) | Solo probados en local (SQLite). Sin desplegar ni probar en Render/Neon (Postgres): tras desplegar, comprobar que crea las tablas, que siembra la programación y que el primer hueco real publica |
+| **URLs editables y «Publicar ahora»** (versión 4) | Probados en local (SQLite, 87 pruebas). Sin desplegar ni probar en Render/Neon: tras desplegar, comprobar que crea la tabla `source_urls`, que siembra las URLs y que «Publicar ahora» publica de verdad (es una publicación real) |
 | Repo dentro de OneDrive | Riesgo de conflictos de sincronización con `.git`; recomendado moverlo fuera |
 
 ## 8. Decisiones de diseño (y por qué)
@@ -126,3 +129,4 @@ borrado de imágenes, ocultación de credenciales en errores, renovación de tok
 | `4ce02c3` | **Tres tipos** (carrusel, publicación, historia), horarios por tipo, generador `--format`, migración de la BD |
 | `c4dcd6a` | `tick.yml` pasa a respaldo (cron desplazado a `:12`/`:42`); cron-job.org (10 min) documentado como vía primaria tras el retraso de horas del cron de GitHub el 22 sep |
 | `2627689` | **Rediseño visual**: estilo oscuro con acento lima (`#D4FF3F`), Inter Tight Black, botones en píldora. Carrusel negro/verde tinta, publicación negra, historia lima. Solo probado en local con muestras (imágenes revisadas a ojo); sin subir como borrador a la app ni probado en la rutina de la nube |
+| _(este commit)_ | Historia en verde tinta (lima no contrastaba), regla de ortografía y mayúsculas en la skill, panel **URLs** editable (`/api/urls`) y botón **Publicar ahora** |

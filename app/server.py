@@ -29,6 +29,7 @@ import guards
 import instagram
 import schedule
 import schedule_store
+import urls_store
 from schedule import KINDS
 
 DEV = os.environ.get("APP_ENV") == "dev"
@@ -394,25 +395,30 @@ def _set_status(conn, pid: str, allowed_from: tuple[str, ...], status: str, erro
     return bool(rows)
 
 
+def _publish_blocker(conn, pid: str, post: dict) -> str | None:
+    """Motivo por el que el post no puede publicarse (None si todo está en orden)."""
+    if guards.check(post["caption_full"], *post["slides_text"]):
+        return "El contenido incumple la restricción de CTA. No se puede publicar."
+    if not db.one(conn, "SELECT COUNT(*) AS n FROM images WHERE post_id = %s", (pid,))["n"]:
+        return "Este borrador no tiene imágenes."
+    if not (os.environ.get("IG_USER_ID") and get_token(conn)):
+        return "Faltan IG_USER_ID / IG_ACCESS_TOKEN en el servidor."
+    return None
+
+
 @app.post("/post/<pid>/approve")
 @login_required
 def approve(pid):
-    """Autoriza el post: pasa a la cola. Se publica en el próximo hueco libre de schedule.txt."""
+    """Autoriza el post: pasa a la cola. Se publica en el próximo hueco libre de la programación."""
     check_csrf()
     if request.form.get("confirm") != "on":
         flash("Marca la casilla de confirmación para autorizar la publicación.", "error")
         return redirect(url_for("post_page", pid=pid))
     with db.connect() as conn:
         post = _load_post(conn, pid)
-        n_images = db.one(conn, "SELECT COUNT(*) AS n FROM images WHERE post_id = %s", (pid,))["n"]
-        if guards.check(post["caption_full"], *post["slides_text"]):
-            flash("El contenido incumple la restricción de CTA. No se puede publicar.", "error")
-            return redirect(url_for("post_page", pid=pid))
-        if not n_images:
-            flash("Este borrador no tiene imágenes.", "error")
-            return redirect(url_for("post_page", pid=pid))
-        if not (os.environ.get("IG_USER_ID") and get_token(conn)):
-            flash("Faltan IG_USER_ID / IG_ACCESS_TOKEN en el servidor.", "error")
+        blocker = _publish_blocker(conn, pid, post)
+        if blocker:
+            flash(blocker, "error")
             return redirect(url_for("post_page", pid=pid))
         rows = db.query(conn, (
             "UPDATE posts SET status = 'approved', approved_at = %s, approved_by = %s, updated_at = %s "
@@ -422,6 +428,35 @@ def approve(pid):
             flash("Este post ya no está en borrador.", "error")
         else:
             flash("Autorizado. Está en la cola y se publicará en el próximo hueco libre.", "ok")
+    return redirect(url_for("post_page", pid=pid))
+
+
+@app.post("/post/<pid>/publish-now")
+@login_required
+def publish_now(pid):
+    """Publicación inmediata, sin esperar al hueco: la autoriza el usuario en el panel. No gasta
+    ningún hueco de la programación. Vale para un borrador o un post en cola."""
+    check_csrf()
+    if request.form.get("confirm") != "on":
+        flash("Marca la casilla de confirmación para publicar ahora.", "error")
+        return redirect(url_for("post_page", pid=pid))
+    with db.connect() as conn:
+        post = _load_post(conn, pid)
+        blocker = _publish_blocker(conn, pid, post)
+        if blocker:
+            flash(blocker, "error")
+            return redirect(url_for("post_page", pid=pid))
+        rows = db.query(conn, (
+            "UPDATE posts SET status = 'publishing', updated_at = %s, error = NULL, "
+            "approved_at = COALESCE(approved_at, %s), approved_by = COALESCE(approved_by, %s) "
+            "WHERE id = %s AND status IN ('draft', 'approved') RETURNING id"),
+            (db.now(), db.now_precise(), current_user()["username"], pid))
+    if not rows:
+        flash("Este post ya no se puede publicar desde su estado actual.", "error")
+    else:
+        base = os.environ.get("PUBLIC_BASE_URL", "").rstrip("/") or request.url_root.rstrip("/")
+        _start_publish([pid], base)
+        flash("Publicando ahora en Instagram…", "ok")
     return redirect(url_for("post_page", pid=pid))
 
 
@@ -704,6 +739,52 @@ def schedule_settings():
     return redirect(url_for("schedule_page"))
 
 
+# ------------------------------------------------------------------------ URLs ---
+
+@app.get("/admin/urls")
+@admin_required
+def urls_page():
+    with db.connect() as conn:
+        urls = urls_store.list_urls(conn)
+    return render_template("urls.html", urls=urls)
+
+
+@app.post("/admin/urls")
+@admin_required
+def urls_add():
+    check_csrf()
+    with db.connect() as conn:
+        try:
+            urls_store.add(conn, request.form.get("url", ""), current_user()["username"])
+            flash("URL añadida.", "ok")
+        except urls_store.UrlError as exc:
+            flash(str(exc), "error")
+    return redirect(url_for("urls_page"))
+
+
+@app.post("/admin/urls/<uid>/update")
+@admin_required
+def urls_update(uid):
+    check_csrf()
+    with db.connect() as conn:
+        try:
+            urls_store.update(conn, uid, request.form.get("url", ""))
+            flash("URL actualizada.", "ok")
+        except urls_store.UrlError as exc:
+            flash(str(exc), "error")
+    return redirect(url_for("urls_page"))
+
+
+@app.post("/admin/urls/<uid>/delete")
+@admin_required
+def urls_delete(uid):
+    check_csrf()
+    with db.connect() as conn:
+        removed = urls_store.delete(conn, uid)
+    flash("URL eliminada." if removed else "Esa URL ya no existe.", "ok" if removed else "error")
+    return redirect(url_for("urls_page"))
+
+
 # ------------------------------------------------------------------------ API ---
 
 def _bad(message: str, code: int = 422):
@@ -802,6 +883,14 @@ def api_list_posts():
             "SELECT id, title, status, kind, source_url, created_at, published_at FROM posts "
             "ORDER BY created_at DESC LIMIT %s"), (limit,))
     return jsonify(rows)
+
+
+@app.get("/api/urls")
+@api_key_required
+def api_urls():
+    """URLs a promocionar (las del panel): de aquí las sortea la tanda semanal."""
+    with db.connect() as conn:
+        return jsonify([r["url"] for r in urls_store.list_urls(conn)])
 
 
 @app.get("/api/posts/<pid>")

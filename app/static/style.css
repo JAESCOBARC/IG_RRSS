@@ -149,3 +149,7 @@ td form { margin: 0; }
 .btn.danger { color: var(--danger); border-color: #E3B8AE; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 code { background: #E8E2CF; padding: 1px 5px; border-radius: 4px; }
+.url-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; padding: 8px 0; border-top: 1px solid var(--line); }
+.url-row:first-of-type { border-top: 0; }
+.url-row > form.row { flex: 1 1 320px; }
+.publish-now { margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--line); }

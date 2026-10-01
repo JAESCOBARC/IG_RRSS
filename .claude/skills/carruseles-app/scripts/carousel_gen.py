@@ -14,7 +14,7 @@ Formatos (--format, por defecto carrusel):
     carrusel     2-10 slides de 1080x1350 (4:5). Portada y CTA final en negro; las intermedias
                  alternan verde tinta y negro (o el tema que indique "theme")
     publicacion  1 imagen de 1080x1350 (4:5), negro
-    historia     1 imagen de 1080x1920 (9:16), lima con letra negra, con márgenes de seguridad
+    historia     1 imagen de 1080x1920 (9:16), verde tinta con letra blanca, con márgenes de seguridad
                  arriba y abajo (~250 px que Instagram tapa con su interfaz)
 
 Genera slide-01.jpg, slide-02.jpg... en la carpeta de salida.
@@ -29,7 +29,7 @@ slides.json: lista de objetos con esta forma:
   "theme": "negro|tinta|lima", // opcional, solo carrusel: fuerza el fondo de esa slide
   "start_y": 220               // opcional, fija el inicio del titular
 }
-"italic" ya no es cursiva: es el color de acento (lima; en la historia, blanco sobre píldora negra).
+"italic" ya no es cursiva: es el color de acento (lima; con "theme": "lima", blanco sobre píldora negra).
 
 Requiere: pip install Pillow
 """
@@ -204,7 +204,7 @@ def pick_theme(fmt, i, n, sdef):
     if sdef.get("theme"):
         return sdef["theme"]
     if fmt == "historia":
-        return "lima"
+        return "tinta"
     if fmt == "publicacion" or i == 1 or i == n or sdef.get("cta_text"):
         return "negro"
     return "tinta" if i % 2 == 0 else "negro"   # intermedias: tinta en 2, 4...; negro en 3, 5...

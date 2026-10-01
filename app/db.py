@@ -60,6 +60,13 @@ SCHEMA = [
         created_at TEXT NOT NULL,
         UNIQUE (weekday, slot_time, kind)
     )""",
+    # URLs de trabajoenexcel.com que se promocionan (se editan desde el panel)
+    """CREATE TABLE IF NOT EXISTS source_urls (
+        id TEXT PRIMARY KEY,
+        url TEXT NOT NULL UNIQUE,
+        created_at TEXT NOT NULL,
+        created_by TEXT
+    )""",
 ]
 
 

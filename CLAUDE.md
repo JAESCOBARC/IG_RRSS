@@ -32,12 +32,12 @@ JPG en el historial aunque se borren.
 
 ## Crear posts
 Usa la skill **`carruseles-app`** (`.claude/skills/carruseles-app/`) siempre que
-se pida un carrusel, una publicación, una historia o un post. Las URLs a promocionar están en `url.txt`; los
+se pida un carrusel, una publicación, una historia o un post. Las URLs a promocionar están en la app (panel → URLs) y se leen con `scripts/pick_urls.py`; los
 ángulos verificados de cada una, en `references/urls.md` de la skill.
 **Cada lunes** una rutina programada de Claude en la nube genera la **tanda semanal**
 (3 borradores, uno de cada tipo: un **carrusel** de servicios, una **publicación de una
 imagen** con un truco de Excel y una **historia** con una promoción breve; las URLs se
-sortean de `url.txt` con `scripts/pick_urls.py` y no se repiten temas recientes; ver
+sortean de esa lista con `scripts/pick_urls.py` y no se repiten temas recientes; ver
 «Tanda semanal» en la skill). El usuario los aprueba antes de sus huecos (el carrusel,
 antes del martes 15:30; la publicación y la historia, antes del jueves 19:00). La skill
 termina subiendo el borrador y dándole al usuario el enlace del panel.
@@ -47,9 +47,11 @@ termina subiendo el borrador y dándole al usuario el enlace del panel.
   y te dejo el link», «link en la bio/descripción» ni «escríbeme por DM». El CTA
   nombra la web (trabajoenexcel.com) con una acción concreta. El servidor
   (`app/guards.py`) también lo rechaza.
-- **El tema sale de las URLs de `url.txt`**.
+- **El tema sale de las URLs del panel** (Claude no las edita: las gestiona el usuario; `app/url.txt` solo es la lista inicial).
+- **Ortografía:** antes de subir un borrador se revisa todo el texto (imágenes, título, caption). Cada frase y cada
+  línea de titular o botón empieza por **mayúscula**; sin erratas ni tildes que falten (paso 5 de la skill).
 - **Claude no publica ni aprueba:** publicar es una acción sobre una cuenta real y
-  la autoriza el usuario en el panel. Claude solo sube borradores. Tampoco lanza el
+  la autoriza el usuario en el panel (con «Aprobar» o con «Publicar ahora»). Claude solo sube borradores. Tampoco lanza el
   workflow con «forzar» (publica fuera de hueco, y admite elegir el tipo): es solo una prueba manual del usuario.
 - **Horarios:** solo los de la programación de la app, que edita el usuario (administrador) en el panel
   (**Programación**). `app/schedule.txt` solo se lee la primera vez, para sembrar la base de datos. Claude

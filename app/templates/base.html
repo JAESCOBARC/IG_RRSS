@@ -16,6 +16,7 @@
   <nav class="nav" aria-label="Principal">
     {% if user.role == 'admin' %}
     <a href="{{ url_for('schedule_page') }}">Programación</a>
+    <a href="{{ url_for('urls_page') }}">URLs</a>
     <a href="{{ url_for('users_page') }}">Usuarios</a>
     {% endif %}
     <a href="{{ url_for('account') }}">{{ user.username }}</a>

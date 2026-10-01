@@ -17,7 +17,7 @@ para su tipo y borra las imágenes.
 |---|---|---|---|
 | `carrusel` | 3–5 slides que promocionan una URL (servicios) | 1080x1350 (4:5), `--format carrusel`, fondo negro / verde tinta (portada y CTA en negro) | caption + hashtags |
 | `publicacion` | 1 sola imagen: **un truco o dato útil de Excel**, con la web al final | 1080x1350 (4:5), `--format publicacion`, **fondo negro** | caption + hashtags |
-| `historia` | 1 sola imagen: **promoción breve** de una URL | 1080x1920 (9:16), `--format historia`, **fondo lima y letra negra** | **ninguno** |
+| `historia` | 1 sola imagen: **promoción breve** de una URL | 1080x1920 (9:16), `--format historia`, **fondo verde tinta y letra blanca** | **ninguno** |
 
 Las historias por API son solo una imagen: no admiten stickers, enlaces, encuestas
 ni texto de publicación, y duran 24 horas. **Todo el mensaje va dentro de la imagen**
@@ -51,10 +51,10 @@ cualquier texto que incumpla esto. Si un carrusel lo incumple, no se publica.
 ## Flujo
 
 ### 1. Definir objetivo y URL
-- **URL:** las páginas a promocionar están en `url.txt` (raíz del repo); léelo
-  siempre. Si el usuario no especifica cuál, y no hay contexto para inferirlo,
+- **URL:** las páginas a promocionar están en la app (panel → URLs, que el usuario edita);
+  léelas con `python scripts/pick_urls.py 99` (sin conexión usa `app/url.txt`). Si el usuario no especifica cuál, y no hay contexto para inferirlo,
   pregunta con opciones sacadas de ese archivo. Si menciona una URL de
-  trabajoenexcel.com que no está en `url.txt`, úsala igualmente.
+  trabajoenexcel.com que no está en la lista, úsala igualmente.
 - **Tema:** haz `WebFetch` de la URL elegida y extrae de la página real el dolor,
   la keyword y la oferta. No te bases solo en memoria.
 - **Objetivo (alcance / conexión / venta):** si no lo dice, infiérelo del
@@ -113,6 +113,15 @@ exactamente 1 slide; el script lo comprueba.)
   `assets/fonts/`; no hace falta instalar nada más.
 
 ### 5. Revisar
+**Ortografía y mayúsculas (obligatorio, antes de subir nada).** Relee TODO el texto: el de cada
+imagen, el título, el caption y los hashtags. Comprueba que:
+- cada frase, cada línea de titular y cada botón **empiezan por mayúscula** (también el remate de
+  acento y el `cta_text`; no vale «no hace falta aprender Excel» ni «solo el 20 %»);
+- no hay erratas, faltan tildes ni signos de apertura (`¿ ?`, `¡ !`), y los números con porcentaje
+  llevan espacio duro (`20\u00a0%`) para que el % no quede solo en una línea;
+- los nombres propios y de funciones respetan su forma (Excel, BUSCARV, trabajoenexcel.com).
+Si algo falla, corrige el JSON y regenera: nunca subas un borrador con una errata.
+
 Abre con Read el slide 1, el último y cualquiera que haya dado aviso de
 overflow, y comprueba que no hay cortes de texto. Nunca entregues sin revisar
 al menos el hook y los slides largos.
