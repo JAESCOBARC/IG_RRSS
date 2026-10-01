@@ -17,7 +17,7 @@ para su tipo y borra las imágenes.
 |---|---|---|---|
 | `carrusel` | 3–5 slides que promocionan una URL (servicios) | 1080x1350 (4:5), `--format carrusel`, fondo negro / verde tinta (portada y CTA en negro) | caption + hashtags |
 | `publicacion` | 1 sola imagen: **un truco o dato útil de Excel**, con la web al final | 1080x1350 (4:5), `--format publicacion`, **fondo negro** | caption + hashtags |
-| `historia` | 1 sola imagen: **promoción breve** de una URL | 1080x1920 (9:16), `--format historia`, **fondo verde tinta y letra blanca** | **ninguno** |
+| `historia` | 1 sola imagen: **promoción breve** de una URL | 1080x1920 (9:16), `--format historia`, **fondo lima y letra negra** | **ninguno** |
 
 Las historias por API son solo una imagen: no admiten stickers, enlaces, encuestas
 ni texto de publicación, y duran 24 horas. **Todo el mensaje va dentro de la imagen**

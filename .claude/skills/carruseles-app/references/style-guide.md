@@ -24,8 +24,8 @@ usuario (hero oscuro con acento lima), medida en píxeles.
 - **carrusel** (1080x1350): portada y CTA final en negro; intermedias alternando tinta (slides
   2, 4…) y negro (3, 5…). `"theme": "lima"` en una slide intermedia da un golpe de ritmo (máx. 1-2).
 - **publicacion** (1080x1350): negro.
-- **historia** (1080x1920): verde tinta con texto blanco y frase de acento en lima (probado: el lima como fondo
-  con píldoras negras no tenía buen contraste; `"theme": "lima"` sigue disponible pero no se usa).
+- **historia** (1080x1920): lima con texto negro; la frase de acento va en blanco sobre píldora negra. (Se probó
+  verde tinta, pero se prefirió mantener el fondo lima.)
   Márgenes de seguridad: Instagram tapa ~250 px arriba y abajo; cabecera en y=300 y botones
   por encima de y≈1620. Una sola imagen sin caption: debe leerse en segundos.
 

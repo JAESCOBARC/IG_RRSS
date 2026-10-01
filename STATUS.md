@@ -129,4 +129,5 @@ borrado de imágenes, ocultación de credenciales en errores, renovación de tok
 | `4ce02c3` | **Tres tipos** (carrusel, publicación, historia), horarios por tipo, generador `--format`, migración de la BD |
 | `c4dcd6a` | `tick.yml` pasa a respaldo (cron desplazado a `:12`/`:42`); cron-job.org (10 min) documentado como vía primaria tras el retraso de horas del cron de GitHub el 22 sep |
 | `2627689` | **Rediseño visual**: estilo oscuro con acento lima (`#D4FF3F`), Inter Tight Black, botones en píldora. Carrusel negro/verde tinta, publicación negra, historia lima. Solo probado en local con muestras (imágenes revisadas a ojo); sin subir como borrador a la app ni probado en la rutina de la nube |
-| `f4d6f80` | Historia en verde tinta (lima no contrastaba), regla de ortografía y mayúsculas en la skill, panel **URLs** editable (`/api/urls`) y botón **Publicar ahora** |
+| `f4d6f80` | Regla de ortografía y mayúsculas en la skill, panel **URLs** editable (`/api/urls`) y botón **Publicar ahora** |
+| _(este commit)_ | La historia vuelve a fondo lima con letra negra (se probó verde tinta y se descartó) |
