@@ -15,10 +15,10 @@ UTC = dt.timezone.utc
 EPOCH = dt.datetime(1970, 1, 1, tzinfo=UTC)
 MIN_TOLERANCE, MAX_TOLERANCE = 30, 720  # minutos; el programador avisa cada 30
 
-KINDS = ("carrusel", "publicacion", "historia")
+KINDS = ("carrusel", "publicacion", "historia", "reel")
 KIND_ALIASES = {"carrusel": "carrusel", "publicacion": "publicacion", "publicación": "publicacion",
-                "historia": "historia"}
-KIND_LABELS = {"carrusel": "carrusel", "publicacion": "publicación", "historia": "historia"}
+                "historia": "historia", "reel": "reel"}
+KIND_LABELS = {"carrusel": "carrusel", "publicacion": "publicación", "historia": "historia", "reel": "reel"}
 
 DAYS = {"lunes": 0, "martes": 1, "miercoles": 2, "miércoles": 2, "jueves": 3,
         "viernes": 4, "sabado": 5, "sábado": 5, "domingo": 6}
@@ -107,7 +107,7 @@ def parse(text: str) -> Schedule:
         kind = KIND_ALIASES.get(m.group(4).lower())
         if not kind:
             raise ScheduleError(
-                f"línea {number}: tipo desconocido «{m.group(4)}» (usa carrusel, publicacion o historia)")
+                f"línea {number}: tipo desconocido «{m.group(4)}» (usa carrusel, publicacion, historia o reel)")
         hour, minute = int(m.group(2)), int(m.group(3))
         if hour > 23 or minute > 59:
             raise ScheduleError(f"línea {number}: hora no válida")
@@ -149,7 +149,7 @@ def parse_time(text: str) -> dt.time:
 def parse_kind(text: str) -> str:
     kind = KIND_ALIASES.get((text or "").strip().lower())
     if not kind:
-        raise ScheduleError("tipo no válido (carrusel, publicación o historia)")
+        raise ScheduleError("tipo no válido (carrusel, publicación, historia o reel)")
     return kind
 
 

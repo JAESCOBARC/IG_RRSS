@@ -51,6 +51,19 @@ def jpeg(color="#F4EFE1", size=(108, 135)) -> bytes:
     return buf.getvalue()
 
 
+def mp4(seconds=10.0, size=(1080, 1920), h264=True) -> bytes:
+    """MP4 mínimo (solo cabeceras ftyp + moov) con duración y tamaño; basta para validar."""
+    import struct
+
+    def box(kind, payload=b""):
+        return struct.pack(">I4s", 8 + len(payload), kind) + payload
+
+    mvhd = box(b"mvhd", b"\x00\x00\x00\x00" + b"\x00" * 8 + struct.pack(">II", 1000, int(seconds * 1000)) + b"\x00" * 80)
+    tkhd = box(b"tkhd", b"\x00" * 76 + struct.pack(">II", size[0] << 16, size[1] << 16))
+    stsd = box(b"mdat", b"avc1" if h264 else b"hev1")
+    return box(b"ftyp", b"isom\x00\x00\x02\x00isom") + box(b"moov", mvhd + box(b"trak", tkhd)) + stsd
+
+
 FEED = (108, 135)    # 4:5
 STORY = (108, 192)   # 9:16
 
@@ -65,6 +78,9 @@ def draft_form(kind="carrusel", n=None, size=None, **over):
     if kind == "historia":
         data["caption"], data["hashtags"] = "", "[]"
     data.update(over)
+    if kind == "reel":
+        data["slides"] = [(io.BytesIO(over_video if (over_video := data.pop("video", None)) else mp4()), "video.mp4")]
+        return data
     n = n or (2 if kind == "carrusel" else 1)
     size = size or (STORY if kind == "historia" else FEED)
     data["slides"] = [(io.BytesIO(jpeg(("#F4EFE1", "#2F6B47", "#182A20")[i % 3], size)), f"slide-{i + 1:02d}.jpg")
@@ -208,7 +224,7 @@ class ApiTests(Base):
         self.assertEqual(self.upload("publicacion", n=2).status_code, 422)     # una publicación, solo 1
         self.assertEqual(self.upload("historia", n=2).status_code, 422)
         self.assertEqual(self.upload("publicacion", caption="").status_code, 422)  # la publicación exige caption
-        self.assertEqual(self.upload("reel").status_code, 422)                 # tipo desconocido
+        self.assertEqual(self.upload("story").status_code, 422)                # tipo desconocido
 
     def test_proporcion_de_imagen_por_tipo(self):
         r = self.upload("historia", size=FEED)            # una imagen 4:5 no vale como historia
@@ -218,6 +234,37 @@ class ApiTests(Base):
         self.assertEqual(self.upload("publicacion", size=(108, 108)).status_code, 201)  # 1:1 sí
         self.assertEqual(self.upload("carrusel", size=(190, 100)).status_code, 201)     # 1,9:1: dentro de 1,91
         self.assertEqual(self.upload("carrusel", size=(200, 100)).status_code, 422)     # 2:1: fuera del máximo
+
+    def test_reel(self):
+        r = self.upload("reel")
+        self.assertEqual(r.status_code, 201, r.get_data(as_text=True))
+        post = self.status(r.get_json()["id"])
+        self.assertEqual(post["kind"], "reel")
+        self.assertIn("trabajoenexcel", post["caption"])        # lleva caption y hashtags
+        self.assertNotEqual(post["hashtags"], "[]")
+
+    def test_reel_valida_el_video(self):
+        def err(**kw):
+            r = self.upload("reel", video=mp4(**kw))
+            self.assertEqual(r.status_code, 422, r.get_data(as_text=True))
+            return r.get_json()["error"]
+        self.assertIn("30 s", err(seconds=45))                  # más de 30 s
+        self.assertIn("30 s", err(seconds=1.5))                 # menos del mínimo de Instagram
+        self.assertIn("9:16", err(size=(1080, 1350)))           # no es vertical
+        self.assertIn("H.264", err(h264=False))
+        self.assertEqual(self.upload("reel", video=mp4(seconds=30)).status_code, 201)
+        self.assertEqual(self.upload("reel", video=jpeg(size=STORY)).status_code, 422)   # una imagen no vale
+        self.assertEqual(self.upload("reel", caption="").status_code, 422)               # exige caption
+        two = draft_form("reel")
+        two["slides"].append((io.BytesIO(mp4()), "otro.mp4"))
+        self.assertEqual(self.client.post("/api/drafts", headers=API, data=two,
+                                          content_type="multipart/form-data").status_code, 422)
+
+    def test_mp4_info(self):
+        import video
+        self.assertEqual(video.mp4_info(mp4(12.5, (1080, 1920))),
+                         {"seconds": 12.5, "width": 1080, "height": 1920, "h264": True})
+        self.assertIsNone(video.mp4_info(b"no soy un mp4 en absoluto"))
 
     def test_jpeg_size(self):
         self.assertEqual(server.jpeg_size(jpeg(size=(108, 192))), (108, 192))
@@ -291,9 +338,10 @@ class ScheduleTests(unittest.TestCase):
     def test_archivo_por_defecto(self):
         self.assertEqual(self.cfg.tz_name, "Europe/Madrid")
         self.assertEqual([(d, f"{t:%H:%M}", k) for d, t, k in self.cfg.slots],
-                         [(1, "15:30", "carrusel"), (3, "19:00", "historia"), (3, "19:00", "publicacion")])
+                         [(1, "15:30", "carrusel"), (3, "19:00", "historia"), (3, "19:00", "publicacion"),
+         (5, "12:00", "reel")])
         self.assertEqual(self.cfg.describe(),
-                         "martes 15:30 (carrusel), jueves 19:00 (historia), jueves 19:00 (publicación)")
+                         "martes 15:30 (carrusel), jueves 19:00 (historia), jueves 19:00 (publicación), sábado 12:00 (reel)")
 
     def test_hueco_vigente_verano(self):
         self.assertEqual(self.cfg.due_slots(at("2026-09-22T13:29:00+00:00")), {})
@@ -318,7 +366,7 @@ class ScheduleTests(unittest.TestCase):
 
     def test_errores_de_formato(self):
         for text in ["lunes 25:00 carrusel", "foo 10:00 carrusel", "martes 10:00", "martes carrusel",
-                     "martes 10:00 reel", "zona: Marte/Olimpo\nmartes 10:00 carrusel",
+                     "martes 10:00 story", "zona: Marte/Olimpo\nmartes 10:00 carrusel",
                      "tolerancia_minutos: mucha\nmartes 10:00 carrusel", "# solo comentarios"]:
             with self.assertRaises(schedule.ScheduleError, msg=text):
                 schedule.parse(text)
@@ -513,6 +561,55 @@ class QueueTests(Base):
         self.assertIn("no es válida", self.client.get("/").get_data(as_text=True))
 
 
+class ReelTests(Base):
+    def test_reel_se_publica_como_video_y_se_borra(self):
+        calls = []
+
+        def fake(urls, caption, user_id, token, kind="carrusel"):
+            calls.append((urls, caption, kind))
+            return {"media_id": "r1", "permalink": "https://www.instagram.com/reel/r1/"}
+
+        instagram.publish = fake
+        pid = self.draft("reel")
+        self.approve(pid)
+        self.login()
+        # el vídeo solo es público mientras se publica; el panel lo ve quien ha iniciado sesión
+        r = self.client.get(f"/media/{pid}/0.mp4")
+        self.assertEqual((r.status_code, r.mimetype), (200, "video/mp4"))
+        self.assertEqual(self.client.get(f"/media/{pid}/0.jpg").status_code, 404)   # no es una imagen
+        self.assertEqual(server.app.test_client().get(f"/media/{pid}/0.mp4").status_code, 404)
+        r = self.client.post(f"/post/{pid}/publish-now", data={"csrf": self.csrf(), "confirm": "on"})
+        self.assertEqual(r.status_code, 302, r.get_data(as_text=True))
+        self.wait_for(pid, {"published"})
+        self.assertTrue(calls[0][0][0].endswith(f"/media/{pid}/0.mp4"))
+        self.assertEqual(calls[0][2], "reel")
+        self.assertIn("#excel", calls[0][1])
+        self.assertEqual(self.n_images(pid), 0)                  # el vídeo se borra tras publicar
+
+    def test_instagram_usa_media_type_reels(self):
+        sent = []
+        real = instagram.api_call
+
+        def fake_api(method, path, token, **params):
+            sent.append((method, path, params))
+            return {"id": "123", "status_code": "FINISHED", "permalink": "https://x"}
+
+        instagram.api_call = fake_api
+        try:
+            out = instagram.publish(["https://app/media/p/0.mp4"], "texto", "U", "T", kind="reel")
+        finally:
+            instagram.api_call = real
+        create = sent[0][2]
+        self.assertEqual((create["media_type"], create["video_url"], create["share_to_feed"]),
+                         ("REELS", "https://app/media/p/0.mp4", "true"))
+        self.assertEqual(create["caption"], "texto")
+        self.assertEqual(out["media_id"], "123")
+
+    def test_reel_se_puede_programar(self):
+        cfg = schedule.parse("sábado 12:00 reel\n")
+        self.assertEqual(cfg.kinds(), {"reel"})
+
+
 class KindQueueTests(Base):
     """Un hueco por tipo (schedule.txt real): carrusel el martes; publicación e historia el jueves."""
 
@@ -576,7 +673,7 @@ class KindQueueTests(Base):
         self.assertEqual(self.tick(MON, force=True, kind="historia").get_json()["post_id"], his)
         self.wait_for(his, {"published"})
         self.assertEqual(self.status(car)["status"], "approved")
-        self.assertEqual(self.tick(MON, force=True, kind="reel").status_code, 400)
+        self.assertEqual(self.tick(MON, force=True, kind="story").status_code, 400)
 
     def test_un_fallo_no_impide_publicar_el_otro_tipo(self):
         pub, his = self.draft("publicacion"), self.draft("historia")
@@ -775,7 +872,8 @@ class ScheduleAdminTests(Base):
     def test_primera_carga_copia_schedule_txt(self):
         self.login()
         html = self.client.get("/admin/schedule").get_data(as_text=True)
-        self.assertEqual(self.slots(), [(1, "15:30", "carrusel"), (3, "19:00", "historia"), (3, "19:00", "publicacion")])
+        self.assertEqual(self.slots(), [(1, "15:30", "carrusel"), (3, "19:00", "historia"), (3, "19:00", "publicacion"),
+         (5, "12:00", "reel")])
         for text in ("Martes", "15:30", "Jueves", "19:00", "Europe/Madrid"):
             self.assertIn(text, html)
 
@@ -803,9 +901,9 @@ class ScheduleAdminTests(Base):
         self.login()
         self.client.get("/admin/schedule")  # carga inicial
         before = self.slots()
-        self.assertEqual(len(before), 3)
+        self.assertEqual(len(before), 4)
         for day, time_, kind in (("9", "10:00", "carrusel"), ("x", "10:00", "carrusel"), ("1", "25:00", "carrusel"),
-                                 ("1", "10:99", "carrusel"), ("1", "", "carrusel"), ("1", "10:00", "reel")):
+                                 ("1", "10:99", "carrusel"), ("1", "", "carrusel"), ("1", "10:00", "story")):
             self.act("/admin/schedule/slots", day=day, time=time_, kind=kind)
         self.assertEqual(self.slots(), before)
 

@@ -5,9 +5,10 @@ Uso:
   python scripts/upload_draft.py CARPETA [--spec spec.json] [--keep]
   python scripts/upload_draft.py --recent      # lista los posts recientes (para no repetir temas)
 
-CARPETA contiene slide-01.jpg, slide-02.jpg... y meta.yaml con:
-  kind (carrusel | publicacion | historia; por defecto carrusel), title, caption,
-  hashtags (lista sin #) y, opcional, source_url. Una historia no lleva caption ni hashtags.
+CARPETA contiene slide-01.jpg, slide-02.jpg... (o, en un reel, video.mp4) y meta.yaml con:
+  kind (carrusel | publicacion | historia | reel; por defecto carrusel), title, caption,
+  hashtags (lista sin #) y, opcional, source_url. Una historia no lleva caption ni hashtags;
+  un reel sí (y su vídeo, de 3 a 30 s, 9:16, H.264).
 --spec es el JSON con el que se generaron las slides; su texto se sube para que
 se vea en el panel y se compruebe la restricción de CTA.
 
@@ -16,7 +17,7 @@ Configuración (variables de entorno o fichero .env en la raíz, ignorado por gi
   IG_APP_API_KEY  la API_KEY de la app. Opcional en el entorno de nube de Claude, donde
                   se guarda como «credencial de API» y el proxy la añade a la petición.
 
-Tras subirlo, las imágenes locales se borran (usa --keep para conservarlas).
+Tras subirlo, las imágenes (o el vídeo) locales se borran (usa --keep para conservarlas).
 """
 import argparse
 import json
@@ -84,10 +85,10 @@ def main() -> int:
     if not args.folder:
         parser.error("indica CARPETA o usa --recent")
 
-    images = sorted(args.folder.glob("slide-*.jpg"))
+    images = sorted(args.folder.glob("slide-*.jpg")) or sorted(args.folder.glob("video.mp4"))
     meta_path = args.folder / "meta.yaml"
     if not images or not meta_path.exists():
-        print(f"{args.folder}: hacen falta slide-XX.jpg y meta.yaml.", file=sys.stderr)
+        print(f"{args.folder}: hacen falta slide-XX.jpg (o video.mp4) y meta.yaml.", file=sys.stderr)
         return 2
     meta = yaml.safe_load(meta_path.read_text(encoding="utf-8")) or {}
 
@@ -99,7 +100,8 @@ def main() -> int:
         "source_url": meta.get("source_url", ""),
         "slides_text": json.dumps(slides_text(args.spec) if args.spec else [], ensure_ascii=False),
     }
-    files = [("slides", (p.name, p.read_bytes(), "image/jpeg")) for p in images]
+    files = [("slides", (p.name, p.read_bytes(), "video/mp4" if p.suffix == ".mp4" else "image/jpeg"))
+             for p in images]
     resp = requests.post(f"{base}/api/drafts", headers=headers, data=data, files=files, timeout=180)
     try:
         body = resp.json()
@@ -109,7 +111,8 @@ def main() -> int:
         print(f"[FALLO] {resp.status_code}: {body.get('error')}", file=sys.stderr)
         return 1
 
-    print(f"[SUBIDO] {len(images)} slide(s). Revísalo y apruébalo en: {body['url']}")
+    what = "vídeo" if images[0].suffix == ".mp4" else f"{len(images)} slide(s)"
+    print(f"[SUBIDO] {what}. Revísalo y apruébalo en: {body['url']}")
     if not args.keep:
         for path in (*images, meta_path):
             path.unlink(missing_ok=True)
@@ -117,7 +120,7 @@ def main() -> int:
             args.folder.rmdir()  # solo si ha quedado vacía
         except OSError:
             pass
-        print("Imágenes locales borradas.")
+        print("Archivos locales borrados.")
     return 0
 
 

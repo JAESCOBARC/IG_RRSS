@@ -2,3 +2,5 @@
 requests
 pyyaml
 pillow
+numpy
+imageio-ffmpeg

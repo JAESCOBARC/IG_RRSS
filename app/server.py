@@ -30,6 +30,7 @@ import instagram
 import schedule
 import schedule_store
 import urls_store
+import video
 from schedule import KINDS
 
 DEV = os.environ.get("APP_ENV") == "dev"
@@ -39,6 +40,8 @@ MAX_CAPTION = 2200
 MAX_SLIDES = 10
 MAX_HASHTAGS = 30
 MAX_IMAGE_BYTES = 8 * 1024 * 1024  # límite de Instagram por imagen
+MAX_VIDEO_BYTES = 40 * 1024 * 1024  # la base de datos es pequeña y el vídeo es temporal
+VIDEO_SECONDS = (3.0, 30.5)         # un Reel: mínimo de Instagram y tope de esta app (30 s)
 RATIO_TOL = 0.005
 FEED_RATIO = (0.8, 1.91)      # ancho/alto admitido en el feed (4:5 a 1,91:1)
 STORY_RATIO = (0.5, 0.6)      # historias: 9:16 (0,5625)
@@ -47,6 +50,7 @@ KIND_RULES = {
     "carrusel": {"count": (2, MAX_SLIDES), "ratio": FEED_RATIO, "caption": True},
     "publicacion": {"count": (1, 1), "ratio": FEED_RATIO, "caption": True},
     "historia": {"count": (1, 1), "ratio": STORY_RATIO, "caption": False},
+    "reel": {"count": (1, 1), "ratio": STORY_RATIO, "caption": True, "video": True},
 }
 TOKEN_REFRESH_DAYS = 20
 STUCK_MINUTES = 10
@@ -218,7 +222,7 @@ def is_stuck(post: dict) -> bool:
 
 
 app.jinja_env.globals["is_stuck"] = is_stuck
-app.jinja_env.globals["KIND"] = {"carrusel": "Carrusel", "publicacion": "Publicación", "historia": "Historia"}
+app.jinja_env.globals["KIND"] = {"carrusel": "Carrusel", "publicacion": "Publicación", "historia": "Historia", "reel": "Reel"}
 app.jinja_env.globals["STATUS"] = {
     "draft": "Por aprobar", "approved": "En cola", "publishing": "Publicando…",
     "failed": "Falló", "published": "Publicado", "rejected": "Rechazado",
@@ -372,9 +376,10 @@ def post_page(pid):
                            refresh=post["status"] == "publishing" and not is_stuck(post))
 
 
+@app.get("/media/<pid>/<int:n>.mp4", endpoint="media_video")
 @app.get("/media/<pid>/<int:n>.jpg")
 def media(pid, n):
-    """Imagen de un borrador. Pública SOLO mientras se publica (Instagram las descarga);
+    """Imagen (o vídeo, en un Reel) de un borrador. Pública SOLO mientras se publica (Instagram las descarga);
     fuera de esa ventana solo la ve quien ha iniciado sesión."""
     with db.connect() as conn:
         row = db.one(conn, (
@@ -383,7 +388,12 @@ def media(pid, n):
         logged_in = bool(row) and row["status"] != "publishing" and bool(current_user(conn))
     if not row or (row["status"] != "publishing" and not logged_in):
         abort(404)
-    return Response(bytes(row["data"]), mimetype="image/jpeg", headers={"Cache-Control": "private, no-store"})
+    data = bytes(row["data"])
+    is_video = data[4:8] == b"ftyp"
+    if is_video != request.path.endswith(".mp4"):
+        abort(404)
+    return Response(data, mimetype="video/mp4" if is_video else "image/jpeg",
+                    headers={"Cache-Control": "private, no-store", "Accept-Ranges": "none"})
 
 
 def _set_status(conn, pid: str, allowed_from: tuple[str, ...], status: str, error=None) -> bool:
@@ -560,7 +570,8 @@ def _publish_worker(pid: str, base_url: str) -> None:
             raise ValueError("el post no tiene imágenes")
         user_id = os.environ.get("IG_USER_ID", "")
         hidden = [token, user_id]
-        urls = [f"{base_url}/media/{pid}/{i}.jpg" for i in range(n)]
+        ext = "mp4" if post["kind"] == "reel" else "jpg"
+        urls = [f"{base_url}/media/{pid}/{i}.{ext}" for i in range(n)]
         result = instagram.publish(urls, post["caption_full"], user_id, token, kind=post["kind"])
     except Exception as exc:  # noqa: BLE001 - cualquier fallo deja el post en "failed"
         with db.connect() as conn:
@@ -791,6 +802,25 @@ def _bad(message: str, code: int = 422):
     return jsonify(error=message), code
 
 
+def _check_video(name: str, data: bytes) -> str | None:
+    """Motivo por el que el MP4 no vale para un Reel (None si está bien)."""
+    if len(data) > MAX_VIDEO_BYTES:
+        return f"{name}: supera los {MAX_VIDEO_BYTES // 2**20} MB"
+    info = video.mp4_info(data)
+    if not info:
+        return f"{name}: no es un MP4 válido (con la cabecera «moov»)"
+    if not info["h264"]:
+        return f"{name}: el vídeo debe ir en H.264"
+    lo, hi = VIDEO_SECONDS
+    if not lo <= info["seconds"] <= hi:
+        return f"{name}: dura {info['seconds']:.1f} s; un Reel debe durar entre {lo:g} y 30 s"
+    rmin, rmax = STORY_RATIO
+    ratio = info["width"] / info["height"]
+    if not rmin - RATIO_TOL <= ratio <= rmax + RATIO_TOL:
+        return f"{name}: proporción {info['width']}x{info['height']} no válida para reel; debe ser 9:16 (1080x1920)"
+    return None
+
+
 @app.post("/api/drafts")
 @api_key_required
 def api_create_draft():
@@ -831,11 +861,18 @@ def api_create_draft():
     files = request.files.getlist("slides")
     lo, hi = rules["count"]
     if not lo <= len(files) <= hi:
-        return _bad(f"un {kind} lleva " + (f"{lo} imagen" if lo == hi == 1 else f"entre {lo} y {hi} imágenes")
+        what = "vídeo" if rules.get("video") else "imagen"
+        return _bad(f"un {kind} lleva " + (f"{lo} {what}" if lo == hi == 1 else f"entre {lo} y {hi} imágenes")
                     + f" (recibidas: {len(files)})")
     images = []
     for f in files:
         data = f.read()
+        if rules.get("video"):
+            problem = _check_video(f.filename, data)
+            if problem:
+                return _bad(problem)
+            images.append(data)
+            continue
         if not data.startswith(b"\xff\xd8\xff"):
             return _bad(f"{f.filename}: no es un JPEG (Instagram solo acepta JPEG)")
         if len(data) > MAX_IMAGE_BYTES:

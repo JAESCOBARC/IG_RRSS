@@ -121,8 +121,11 @@ summary { cursor: pointer; font-weight: 600; }
 /* tipos de post */
 .pill.kind { background: #E4EAF0; color: #2C4A63; }
 .tags { display: flex; flex-wrap: wrap; gap: 6px; }
-.post-card.k-historia img, .post-card.k-historia .noimg { aspect-ratio: 9 / 16; }
-.slides.kind-historia figure { flex: 0 0 min(56vw, 240px); }
+.post-card.k-historia img, .post-card.k-historia .noimg,
+.post-card.k-reel video { aspect-ratio: 9 / 16; }
+.post-card video { width: 100%; object-fit: cover; display: block; background: #0A0A0A; }
+.slides.kind-historia figure, .slides.kind-reel figure { flex: 0 0 min(56vw, 240px); }
+.slides video { width: 100%; aspect-ratio: 9 / 16; display: block; border-radius: 10px; background: #0A0A0A; }
 .slides.kind-historia img { aspect-ratio: 9 / 16; }
 .slides.kind-publicacion figure { flex: 0 0 min(86vw, 360px); }
 

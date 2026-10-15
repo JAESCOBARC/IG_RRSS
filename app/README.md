@@ -1,9 +1,9 @@
 # App de aprobación
 
-Panel web para revisar el contenido generado (**carruseles, publicaciones de una imagen e
-historias**), autorizarlo y publicarlo en Instagram **en los huecos que definas**
+Panel web para revisar el contenido generado (**carruseles, publicaciones de una imagen,
+historias y reels en vídeo**), autorizarlo y publicarlo en Instagram **en los huecos que definas**
 (se configuran desde el panel). Al publicar, la app **borra
-los JPG**; solo conserva el texto, el estado y el enlace del post.
+los JPG y vídeos**; solo conserva el texto, el estado y el enlace del post.
 
 ```
 Claude ──(scripts/upload_draft.py)──▶ borrador ──▶ Neon (Postgres)
@@ -48,8 +48,9 @@ tolerancia_minutos: 120
 martes 15:30 carrusel
 jueves 19:00 publicacion
 jueves 19:00 historia
+sábado 12:00 reel
 ```
-- Cada hueco es **«día hora tipo»** con tipo `carrusel`, `publicacion` o `historia`. Dos huecos a la
+- Cada hueco es **«día hora tipo»** con tipo `carrusel`, `publicacion`, `historia` o `reel`. Dos huecos a la
   misma hora con tipos distintos salen juntos.
 - Un post por hueco: el **más antiguo de la cola de ese tipo** (orden de aprobación).
 - Si a esa hora no hay ninguno aprobado de ese tipo, el hueco **se pierde**: aprueba antes de la hora.
@@ -154,6 +155,7 @@ en producción, paso 5) y el que avisa por correo si una publicación falla.
 | Carrusel | 2-10 | 4:5 a 1,91:1 (p. ej. 1080x1350) | caption + hashtags |
 | Publicación | 1 | 4:5 a 1,91:1 (p. ej. 1080x1350) | caption + hashtags |
 | Historia | 1 | 9:16 (1080x1920) | ninguno (la API no lo admite) |
+| Reel | 1 vídeo MP4 H.264, 3-30 s, ≤ 40 MB | 9:16 (1080x1920) | caption + hashtags |
 
 Estados: **Por aprobar**, **En cola**, **Publicando**, **Publicado**, **Falló** (con el error;
 comprueba en Instagram que no se publicó antes de reabrirlo) y **Rechazado**.

@@ -1,13 +1,13 @@
 # IG_RRSS — contenido de Instagram con aprobación
 
-Genera contenido para **@trabajoenexcel** (promociona trabajoenexcel.com) en tres tipos:
-**carrusel**, **publicación de una imagen** e **historia** (una imagen 9:16, sin texto de
-publicación). Lo sube como borrador a una app web de aprobación y, cuando el usuario los aprueba
+Genera contenido para **@trabajoenexcel** (promociona trabajoenexcel.com) en cuatro tipos:
+**carrusel**, **publicación de una imagen**, **historia** (una imagen 9:16, sin texto de
+publicación) y **reel** (vídeo animado 9:16 de 6-30 s con música original libre de derechos, caption y hashtags). Lo sube como borrador a una app web de aprobación y, cuando el usuario los aprueba
 allí, se publican en Instagram. Repo: `JAESCOBARC/IG_RRSS` (**público**).
 
 ## Cómo funciona
 1. Claude genera las imágenes (JPG) y el texto **en un directorio temporal** con la
-   skill `carruseles-app` (`--format carrusel|publicacion|historia`) y ejecuta
+   skill `carruseles-app` (`--format carrusel|publicacion|historia`, o `reel_gen.py` para vídeo) y ejecuta
    `scripts/upload_draft.py`.
 2. La app (`app/`, Flask, desplegada en Render; blueprint en `render.yaml`) guarda
    el borrador en Postgres (Neon) y lo muestra en un panel con usuarios y contraseña: slides,
@@ -35,8 +35,8 @@ Usa la skill **`carruseles-app`** (`.claude/skills/carruseles-app/`) siempre que
 se pida un carrusel, una publicación, una historia o un post. Las URLs a promocionar están en la app (panel → URLs) y se leen con `scripts/pick_urls.py`; los
 ángulos verificados de cada una, en `references/urls.md` de la skill.
 **Cada lunes** una rutina programada de Claude en la nube genera la **tanda semanal**
-(3 borradores, uno de cada tipo: un **carrusel** de servicios, una **publicación de una
-imagen** con un truco de Excel y una **historia** con una promoción breve; las URLs se
+(4 borradores, uno de cada tipo: un **carrusel** de servicios, una **publicación de una
+imagen** con un truco de Excel, una **historia** con una promoción breve y un **reel** animado; las URLs se
 sortean de esa lista con `scripts/pick_urls.py` y no se repiten temas recientes; ver
 «Tanda semanal» en la skill). El usuario los aprueba antes de sus huecos (el carrusel,
 antes del martes 15:30; la publicación y la historia, antes del jueves 19:00). La skill
@@ -68,7 +68,10 @@ termina subiendo el borrador y dándole al usuario el enlace del panel.
 - Máximo 2200 caracteres de caption y 30 hashtags (la skill usa 3-6). **Las historias no
   llevan caption ni hashtags** (la API no los admite): todo el mensaje va en la imagen.
 - **Tipos e imágenes:** carrusel 2-10 imágenes y publicación/historia 1 sola; feed 4:5
-  (1080x1350) e historia 9:16 (1080x1920). La app rechaza lo que no cumpla.
+  (1080x1350) e historia 9:16 (1080x1920). Reel: 1 vídeo MP4 H.264 9:16 (1080x1920) de 3-30 s y ≤ 40 MB.
+  La app rechaza lo que no cumpla.
+- **Música de los Reels:** solo la pista original que sintetiza `reel_gen.py` (sin samples ni
+  catálogos de terceros). Nunca se añade música descargada: habría que verificar su licencia.
 - Commits: mensaje corto en inglés, como los existentes.
 
 ## Comandos

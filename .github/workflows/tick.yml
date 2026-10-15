@@ -22,7 +22,7 @@ on:
       tipo:
         description: "Solo con «forzar»: qué tipo publicar (cualquiera = el más antiguo de todos)"
         type: choice
-        options: [cualquiera, carrusel, publicacion, historia]
+        options: [cualquiera, carrusel, publicacion, historia, reel]
         default: cualquiera
 
 permissions:

@@ -8,6 +8,7 @@ API_VERSION = os.environ.get("IG_API_VERSION", "v23.0")
 API = f"https://graph.instagram.com/{API_VERSION}"
 POLL_SECONDS = 3
 POLL_ATTEMPTS = 40
+VIDEO_POLL_ATTEMPTS = 100  # los vídeos tardan más en procesarse (~5 min)
 
 
 class IGError(Exception):
@@ -28,8 +29,8 @@ def api_call(method: str, path: str, token: str, **params) -> dict:
     return body
 
 
-def wait_until_ready(container_id: str, token: str) -> None:
-    for _ in range(POLL_ATTEMPTS):
+def wait_until_ready(container_id: str, token: str, attempts: int = POLL_ATTEMPTS) -> None:
+    for _ in range(attempts):
         status = api_call("GET", container_id, token, fields="status_code").get("status_code")
         if status == "FINISHED":
             return
@@ -40,9 +41,14 @@ def wait_until_ready(container_id: str, token: str) -> None:
 
 
 def publish(image_urls: list[str], caption: str, user_id: str, token: str, kind: str = "carrusel") -> dict:
-    """Publica una historia (1 imagen), una publicación (1 imagen) o un carrusel (2-10).
-    Devuelve {"media_id", "permalink"}. Las historias no admiten texto de publicación."""
-    if kind == "historia":
+    """Publica un Reel (1 vídeo), una historia (1 imagen), una publicación (1 imagen) o un carrusel
+    (2-10). En un Reel, `image_urls` lleva la URL del vídeo. Devuelve {"media_id", "permalink"}.
+    Las historias no admiten texto de publicación."""
+    if kind == "reel":
+        container = api_call("POST", f"{user_id}/media", token, media_type="REELS",
+                             video_url=image_urls[0], caption=caption, share_to_feed="true")["id"]
+        wait_until_ready(container, token, VIDEO_POLL_ATTEMPTS)
+    elif kind == "historia":
         container = api_call("POST", f"{user_id}/media", token,
                              media_type="STORIES", image_url=image_urls[0])["id"]
     elif len(image_urls) == 1:
@@ -55,7 +61,8 @@ def publish(image_urls: list[str], caption: str, user_id: str, token: str, kind:
             wait_until_ready(child, token)
         container = api_call("POST", f"{user_id}/media", token, media_type="CAROUSEL",
                              children=",".join(children), caption=caption)["id"]
-    wait_until_ready(container, token)
+    if kind != "reel":
+        wait_until_ready(container, token)
     media_id = api_call("POST", f"{user_id}/media_publish", token, creation_id=container)["id"]
     permalink = ""
     try:

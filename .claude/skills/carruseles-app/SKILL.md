@@ -1,11 +1,11 @@
 ---
 name: carruseles-app
-description: Crea contenido de Instagram (carruseles, publicaciones de una imagen e historias) de alto impacto y alcance para conseguir seguidores, promocionando las páginas de trabajoenexcel.com (homepage, profesor-excel-online.html, test-nivel-excel.html), y los sube como borrador a la app de aprobación, donde el usuario los revisa y autoriza su publicación en @trabajoenexcel. Úsala SIEMPRE que el usuario pida "un carrusel", "carrusel de Instagram", "un post", "una historia", "una publicación", "promociona esta URL en Instagram", mencione alcance/seguidores/engagement para trabajoenexcel.com, o pida contenido de Instagram sobre clases de Excel, el profesor particular, o el test de nivel. También úsala si pide ajustar colores, tipografía o número de slides de un carrusel ya generado con esta skill.
+description: Crea contenido de Instagram (carruseles, publicaciones de una imagen, historias y Reels en vídeo animado de hasta 30 s con música libre) de alto impacto y alcance para conseguir seguidores, promocionando las páginas de trabajoenexcel.com (homepage, profesor-excel-online.html, test-nivel-excel.html), y los sube como borrador a la app de aprobación, donde el usuario los revisa y autoriza su publicación en @trabajoenexcel. Úsala SIEMPRE que el usuario pida "un carrusel", "carrusel de Instagram", "un post", "una historia", "una publicación", "un reel", "un vídeo", "promociona esta URL en Instagram", mencione alcance/seguidores/engagement para trabajoenexcel.com, o pida contenido de Instagram sobre clases de Excel, el profesor particular, o el test de nivel. También úsala si pide ajustar colores, tipografía o número de slides de un carrusel ya generado con esta skill.
 ---
 
 # Carruseles App — trabajoenexcel.com
 
-Genera contenido de Instagram en JPG, en tres formatos, con copy optimizado para
+Genera contenido de Instagram en JPG (y vídeo MP4 para Reels), en cuatro formatos, con copy optimizado para
 alcance orgánico con pocos o cero seguidores, y lo sube como **borrador** a la app
 de aprobación (`app/`, publicada en Render; ver `CLAUDE.md`). El usuario lo revisa
 allí y, si lo aprueba, la app lo publica en el siguiente hueco de `app/schedule.txt`
@@ -18,11 +18,23 @@ para su tipo y borra las imágenes.
 | `carrusel` | 3–5 slides que promocionan una URL (servicios) | 1080x1350 (4:5), `--format carrusel`, fondo negro / verde tinta (portada y CTA en negro) | caption + hashtags |
 | `publicacion` | 1 sola imagen: **un truco o dato útil de Excel**, con la web al final | 1080x1350 (4:5), `--format publicacion`, **fondo negro** | caption + hashtags |
 | `historia` | 1 sola imagen: **promoción breve** de una URL | 1080x1920 (9:16), `--format historia`, **fondo lima y letra negra** | **ninguno** |
+| `reel` | **vídeo animado de 10-30 s** (2-8 escenas de texto que entran línea a línea, barra de progreso y música original): dolor → solución → CTA | `reel_gen.py` → `video.mp4` 1080x1920 (9:16), H.264 | caption + hashtags |
 
 Las historias por API son solo una imagen: no admiten stickers, enlaces, encuestas
 ni texto de publicación, y duran 24 horas. **Todo el mensaje va dentro de la imagen**
 (corto: un gancho y un remate) y el CTA nombra la web. El generador ya respeta los
 márgenes de seguridad de Instagram (~250 px arriba y abajo).
+
+**Reel (vídeo):** lo genera `scripts/reel_gen.py` (Pillow + el ffmpeg que trae `imageio-ffmpeg`; no hace
+falta instalar ffmpeg). Duración total 6-30 s (la app rechaza más de 30 s y menos de 3 s); apunta a
+**15-25 s**. Cada escena es un titular corto (el mismo estilo que las imágenes: `runs`, `body`, `theme`,
+`seconds`), el texto aparece línea a línea y una barra lima de progreso recorre la parte alta. La
+**música es original**: `reel_gen.py` la sintetiza él mismo (acordes, bajo, bombo suave y hi-hat; sin
+samples ni terceros), así que está libre de derechos y no hay que atribuir nada. **Nunca** metas música
+descargada ni de ningún catálogo (ni «libre» de terceros): cualquier otra pista exigiría verificar su
+licencia. `--no-music` deja el vídeo con pista silenciosa. Estructura de un buen Reel: escena 1 = gancho
+de ≤ 8 palabras (se decide en 2 s si se sigue viendo); 1-3 escenas intermedias con una idea cada una; última =
+CTA con la web (lleva `cta_text`; la píldora de la web aparece sola). 3-6 escenas de 3-5 s funcionan bien.
 
 ## Principio de trabajo: AUTONOMÍA TOTAL en la creación
 
@@ -64,7 +76,7 @@ cualquier texto que incumpla esto. Si un carrusel lo incumple, no se publica.
 - **Objetivo (alcance / conexión / venta):** si no lo dice, infiérelo del
   contexto («quiero seguidores» → alcance; «quiero que compren clases» → venta)
   y dilo en una frase; no lo preguntes salvo que sea genuinamente ambiguo.
-- **Tipo y nº de slides:** si no lo dice, carrusel. Un carrusel lleva 3–5 slides (por defecto 5); una publicación o una historia, exactamente 1 imagen.
+- **Tipo y nº de slides:** si no lo dice, carrusel. Un carrusel lleva 3–5 slides (por defecto 5); una publicación o una historia, exactamente 1 imagen; un reel, 1 vídeo (2-8 escenas, 6-30 s).
 
 ### 2. Sacar el ángulo real
 Combina lo que extrajiste de la página con `references/urls.md`, que ya tiene el
@@ -95,6 +107,10 @@ Una sola imagen: gancho en bold (el truco) + remate de acento (por qué importa)
 **Historia** (`historia`): una sola imagen 9:16 con la promoción breve de una URL:
 gancho corto en bold + remate de acento + `"cta_text"` con la acción («Haz el test gratis»). Máximo unas 3-4 líneas de texto en total: se lee en 5 segundos. Sin caption.
 
+**Reel** (`reel`): el mismo copy corto y afirmativo, pero repartido en escenas (JSON de escenas, ver la
+cabecera de `reel_gen.py`). Ritmo: 3-4 s por escena (un titular de 2-3 líneas se lee en 3 s). Sin cifras
+ni afirmaciones que no estén en la página real. Lleva caption y hashtags como una publicación (paso 6).
+
 No escribas saltos de línea a mano: el script hace wrap midiendo la fuente real
 (ver la sección anti-overflow de `references/style-guide.md`).
 
@@ -109,6 +125,10 @@ python .claude/skills/carruseles-app/scripts/carousel_gen.py <tmp>/spec.json <tm
 (`--format` por defecto es `carrusel`. Con `publicacion` o `historia` el JSON lleva
 exactamente 1 slide; el script lo comprueba.)
 
+- **Reel:** `python .claude/skills/carruseles-app/scripts/reel_gen.py <tmp>/escenas.json <tmp>/post`
+  escribe `<tmp>/post/video.mp4` y la hoja de contacto `<tmp>/post.preview.jpg` (fuera de la carpeta). Tarda
+  ~1-2 min. Si avisa con `⚠ POSIBLE OVERFLOW` o con «el texto aún está entrando», acorta la escena o alarga
+  `seconds`, y regenera. Si falta `imageio-ffmpeg`: `pip install imageio-ffmpeg numpy pillow`.
 - Carpeta: `<tmp>/post/` (temporal). Solo existe hasta que se sube el borrador.
 - El script escribe `slide-01.jpg`, `slide-02.jpg`... (Instagram solo acepta
   JPEG) e imprime dónde termina el texto de cada slide. Si avisa con
@@ -126,6 +146,9 @@ imagen, el título, el caption y los hashtags. Comprueba que:
 - los nombres propios y de funciones respetan su forma (Excel, BUSCARV, trabajoenexcel.com).
 Si algo falla, corrige el JSON y regenera: nunca subas un borrador con una errata.
 
+**Reel:** abre con Read la hoja `<tmp>/post.preview.jpg` (un fotograma por escena): comprueba que el
+texto se lee entero y sin cortes. Además, el script imprime la duración final; debe ser ≤ 30 s.
+
 Abre con Read el slide 1, el último y cualquiera que haya dado aviso de
 overflow, y comprueba que no hay cortes de texto. Nunca entregues sin revisar
 al menos el hook y los slides largos.
@@ -133,7 +156,7 @@ al menos el hook y los slides largos.
 ### 6. Escribir `meta.yaml` (copy de Instagram)
 Crea `<tmp>/post/meta.yaml` con estos campos:
 
-- `kind`: `carrusel`, `publicacion` o `historia` (si falta, se entiende carrusel).
+- `kind`: `carrusel`, `publicacion`, `historia` o `reel` (si falta, se entiende carrusel).
 - `title`: nombre corto del post para el panel (máx. 120 caracteres).
 - `source_url`: la URL de trabajoenexcel.com que promociona.
 - `caption` y `hashtags` (lo que sigue). **Una historia no lleva `caption` ni
@@ -151,16 +174,16 @@ Crea `<tmp>/post/meta.yaml` con estos campos:
   alto (`excel`, `productividad`), de nicho medio (`buscarv`, `tablasdinamicas`,
   `powerquery`) y de intención de búsqueda (`buscandotrabajo`,
   `entrevistadetrabajo`, `cursodeexcel`).
-- Si preguntan por música/audio: el audio en tendencia impulsa Reels, no
-  carruseles estáticos; para máximo alcance, un Reel con las mismas slides rinde
-  más (este repo solo publica carruseles/imágenes).
+- Música: los Reels de esta skill llevan pista original sin derechos (ver «Formatos»). El audio en
+  tendencia de Instagram no se puede elegir por API; si el usuario quiere otro, que lo cambie él en
+  Instagram tras publicar.
 
 ### 7. Subir el borrador a la app de aprobación
 ```bash
 python scripts/upload_draft.py <tmp>/post --spec <tmp>/spec.json
 ```
 
-- Sube las slides, el caption, los hashtags y el texto de los slides. El
+- Sube las slides (o el `video.mp4`), el caption, los hashtags y el texto de los slides. El
   servidor vuelve a comprobar la restricción de CTA y rechaza el borrador si la
   incumple: corrige el copy y vuelve a subirlo.
 - Necesita `IG_APP_URL` e `IG_APP_API_KEY` (variables de entorno o `.env` en la
@@ -181,33 +204,35 @@ perfil de Instagram si llegó a publicarse.
 
 ## Tanda semanal (los lunes)
 
-Cuando se pida «la tanda semanal», «los 3 posts de la semana», o la ejecute la
-rutina programada de los lunes, genera **3 piezas, una de cada tipo**, siguiendo el
+Cuando se pida «la tanda semanal», «los 4 posts de la semana», o la ejecute la
+rutina programada de los lunes, genera **4 piezas, una de cada tipo**, siguiendo el
 flujo 1-7 para cada una, más estas reglas:
 
 1. **Contexto:** ejecuta `python scripts/upload_draft.py --recent` para ver los posts
    de las últimas semanas (tipo, título y URL). Necesita `IG_APP_URL` (y la clave, ver paso 7).
-2. **URLs al azar:** obtén 2 con `python scripts/pick_urls.py 2` (no las elijas tú: el
-   script es el que sortea). La primera es para el **carrusel** y la segunda para la
-   **historia**. Si una URL no está en `references/urls.md`, saca el dolor, la keyword y
+2. **URLs al azar:** obtén 3 con `python scripts/pick_urls.py 3` (no las elijas tú: el
+   script es el que sortea). La primera es para el **carrusel**, la segunda para la
+   **historia** y la tercera para el **Reel**. Si una URL no está en `references/urls.md`, saca el dolor, la keyword y
    el CTA real de la propia página (`WebFetch`) y aplica la fórmula «[acción concreta] en
    trabajoenexcel.com». En la tanda semanal no modifiques archivos del repo.
-3. **Las 3 piezas:**
+3. **Las 4 piezas:**
    - **Carrusel** (`carrusel`, 3–5 slides): servicios/URL sorteada.
    - **Publicación de una imagen** (`publicacion`): un truco o dato útil de Excel, con
      la web al final.
    - **Historia** (`historia`): promoción breve de la segunda URL.
-4. **Ángulos distintos:** entre las 3 de la tanda y respecto a los recientes: no repitas
+   - **Reel** (`reel`): vídeo animado de 15-25 s sobre la tercera URL (dolor → solución → CTA),
+     con `reel_gen.py` y música original.
+4. **Ángulos distintos:** entre las 4 de la tanda y respecto a los recientes: no repitas
    el mismo dolor, gancho, truco ni ejemplo de las últimas 3-4 semanas (en los trucos de
    Excel, no repitas la función o el atajo). Varía el objetivo (alcance / conexión / venta).
-5. **Cada pieza en su propia carpeta temporal** (`<tmp>/post1`, `post2`, `post3`), con
+5. **Cada pieza en su propia carpeta temporal** (`<tmp>/post1` … `post4`), con
    su formato (`--format`), su revisión visual del paso 5 y las «Restricciones» de siempre.
-6. **Sube las 3** con `scripts/upload_draft.py`. Si el servidor rechaza una, corrígela y
-   vuelve a subirla; si al final no se pueden subir las 3, dilo claramente en el resumen.
-7. **No apruebes ni publiques nada.** Termina con un resumen corto: las 3 piezas (tipo,
+6. **Sube las 4** con `scripts/upload_draft.py`. Si el servidor rechaza una, corrígela y
+   vuelve a subirla; si al final no se pueden subir las 4, dilo claramente en el resumen.
+7. **No apruebes ni publiques nada.** Termina con un resumen corto: las 4 piezas (tipo,
    título y enlace del panel) y el recordatorio de las horas de `app/schedule.txt` (por
    defecto: el carrusel sale el martes 15:30; la publicación y la historia, el jueves
-   19:00): que las aprueben **antes** de esa hora.
+   19:00; el Reel, el sábado 12:00): que las aprueben **antes** de esa hora.
 
 ## Referencias
 - `references/urls.md` — dolor, keyword y CTA reales de las URLs verificadas. Léelo

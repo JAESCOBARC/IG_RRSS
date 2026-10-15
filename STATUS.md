@@ -35,8 +35,9 @@ del servidor al publicar (o al rechazar) y del equipo al subirlas.
 | `carrusel` | 2–10 (skill: 3–5) | 4:5 a 1,91:1 (1080×1350) | caption + hashtags | Servicios, sobre una URL de la lista del panel |
 | `publicacion` | 1 | 4:5 a 1,91:1 (1080×1350) | caption + hashtags | Truco o dato útil de Excel, con la web |
 | `historia` | 1 | 9:16 (1080×1920) | **ninguno** (la API no lo admite) | Promoción breve de una URL; se ve 24 h |
+| `reel` | 1 **vídeo** MP4 H.264, 3–30 s, ≤ 40 MB | 9:16 (1080×1920) | caption + hashtags | Animación de 2–8 escenas (`reel_gen.py`) con música original sintetizada (libre de derechos); dolor → solución → CTA |
 
-La app valida el tipo, el nº de imágenes y la proporción al subir el borrador.
+La app valida el tipo, el nº de imágenes (o el vídeo: formato, códec, duración y proporción, leyendo la cabecera MP4 sin ffmpeg) al subir el borrador.
 
 ## 4. Programación inicial (`app/schedule.txt`, editable desde el panel)
 Se copia a la base de datos al primer arranque; desde entonces se cambia en el panel. Zona `Europe/Madrid` (cambio verano/invierno automático), tolerancia 120 min.
@@ -78,6 +79,10 @@ borrado de imágenes, ocultación de credenciales en errores, renovación de tok
 |---|---|
 | Publicación real de una **publicación de una imagen** | Sin probar en Instagram (mismo código que un carrusel simple, validada en local) |
 | Jueves 19:00 (publicación + historia juntas) | Sin observar todavía |
+| **Reels** (versión 5) | Solo probados en local: 93 pruebas en verde (validación del MP4, `media_type=REELS` simulado, borrado tras publicar) y un vídeo real generado y comprobado (H.264 + AAC, 1080×1920). **Nunca publicado en Instagram**: queda por comprobar que la API acepta el vídeo servido por Render (`video_url`, sin cabecera Range), cuánto tarda en procesarlo y cómo se ve en el móvil. Probar con «Publicar ahora» sobre un Reel de prueba |
+| Hueco del Reel (sábado 12:00) | Solo está en `schedule.txt` (siembra de bases nuevas). En la base de datos actual **hay que crearlo a mano en el panel → Programación** (tipo «reel») |
+| La rutina de la nube puede **generar vídeo** | Sin comprobar: su entorno necesita `pip install -r requirements.txt` (imageio-ffmpeg trae su propio ffmpeg) y tarda ~1–2 min por Reel |
+| Neon (0,5 GB) con vídeos | Un Reel pesa ~1–8 MB y se borra al publicar o rechazar; sin medir con vídeos largos de verdad |
 | Aspecto de la **historia en el móvil** (márgenes de seguridad de 250 px) | Sin ver; comprobarlo abriendo la historia publicada |
 | **cron-job.org como único punto de fallo de la vía primaria** | Si su cuenta o el job se deshabilitan (p. ej. demasiados fallos) y nadie se entera, se vuelve a depender del cron de GitHub (lento) hasta el aviso rojo del panel a las 2 h. Mitigado en parte: notificaciones de fallo activadas en el job; sin probar el aviso real |
 | **Dominios de trabajoenexcel.com bloqueados** en el entorno de la rutina (`EGRESS_BLOCKED`) | Abierto: la rutina no puede leer las páginas y usa los ángulos de `urls.md` (solo 3 de las 7 URLs) |
@@ -109,7 +114,7 @@ borrado de imágenes, ocultación de credenciales en errores, renovación de tok
 - La tanda semanal del 2026-09-22 dio un atajo de Excel en inglés (Ctrl+E para Relleno rápido) en vez del de la versión en español (Ctrl+Mayús+E); el usuario lo corrigió tras verlo en el panel. Lección: los atajos con Ctrl+letra no siempre coinciden entre idiomas; ahora se verifican contra `.claude/skills/carruseles-app/references/trucos-excel.md` antes de darlos por buenos.
 
 ## 10. Operación (semana tipo)
-1. **Lunes ~08:02 (Madrid):** la rutina sube 3 borradores (carrusel, publicación, historia). Recibes el resumen con los enlaces.
+1. **Lunes ~08:02 (Madrid):** la rutina sube 4 borradores (carrusel, publicación, historia, reel). Recibes el resumen con los enlaces.
 2. **Antes del martes 15:30 / jueves 19:00:** revisas en el panel y aprobáis. Lo no aprobado a tiempo espera al siguiente hueco de su tipo.
 3. **En cada hueco:** la app publica y borra las imágenes. Si algo falla, el workflow termina en rojo (correo de GitHub) y el panel muestra el error.
 4. **Pruebas manuales:** GitHub → Actions → «Programador de publicaciones» → *Run workflow* (`forzar` y `tipo`). Publica ya y de verdad.
@@ -127,6 +132,7 @@ borrado de imágenes, ocultación de credenciales en errores, renovación de tok
 | `43bc838` | Retirado el sistema antiguo (`queue/`, `publish.py`, workflows viejos) |
 | `0863b58` | `.claude/settings.json` deja de versionarse |
 | `4ce02c3` | **Tres tipos** (carrusel, publicación, historia), horarios por tipo, generador `--format`, migración de la BD |
+| (versión 5) | **Reels**: nuevo tipo `reel` (vídeo animado ≤ 30 s con música original sintetizada), `reel_gen.py`, validación de MP4, publicación `REELS`, tanda semanal de 4. Sin commit todavía |
 | `c4dcd6a` | `tick.yml` pasa a respaldo (cron desplazado a `:12`/`:42`); cron-job.org (10 min) documentado como vía primaria tras el retraso de horas del cron de GitHub el 22 sep |
 | `2627689` | **Rediseño visual**: estilo oscuro con acento lima (`#D4FF3F`), Inter Tight Black, botones en píldora. Carrusel negro/verde tinta, publicación negra, historia lima. Verificado por el usuario: la rutina de la nube, con la red permitida para trabajoenexcel.com, lee las páginas y genera la tanda con el diseño nuevo; los borradores se ven bien en el panel |
 | `f4d6f80` | Regla de ortografía y mayúsculas en la skill, panel **URLs** editable (`/api/urls`) y botón **Publicar ahora** |

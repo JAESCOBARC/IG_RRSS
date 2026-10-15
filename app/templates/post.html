@@ -20,8 +20,12 @@
   <div class="slides kind-{{ post.kind }}">
     {% for i in range(n_images) %}
     <figure>
+      {% if post.kind == 'reel' %}
+      <video src="{{ url_for('media_video', pid=post.id, n=i) }}" controls playsinline preload="metadata"></video>
+      {% else %}
       <img src="{{ url_for('media', pid=post.id, n=i) }}" alt="Slide {{ i + 1 }} de {{ n_images }}" loading="lazy">
-      <figcaption>{{ i + 1 }} / {{ n_images }}</figcaption>
+      {% endif %}
+      {% if post.kind != 'reel' %}<figcaption>{{ i + 1 }} / {{ n_images }}</figcaption>{% endif %}
     </figure>
     {% endfor %}
   </div>
@@ -108,7 +112,7 @@
     <input type="hidden" name="csrf" value="{{ csrf_token() }}">
     <label class="check">
       <input type="checkbox" name="confirm" required {% if violations %}disabled{% endif %}>
-      He revisado las imágenes y el texto. Autorizo su publicación en el próximo hueco libre.
+      He revisado {% if post.kind == 'reel' %}el vídeo (con su música){% else %}las imágenes{% endif %} y el texto. Autorizo su publicación en el próximo hueco libre.
     </label>
     <button class="btn primary" type="submit" {% if violations %}disabled{% endif %}>Aprobar y poner en cola</button>
   </form>

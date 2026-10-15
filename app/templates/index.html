@@ -3,7 +3,9 @@
 
 {% macro card(p, eta=None) %}
 <a class="post-card k-{{ p.kind }}" href="{{ url_for('post_page', pid=p.id) }}">
-  {% if p.n_images %}
+  {% if p.n_images and p.kind == 'reel' %}
+  <video src="{{ url_for('media_video', pid=p.id, n=0) }}#t=0.5" preload="metadata" muted playsinline aria-label="Vídeo de «{{ p.title }}»"></video>
+  {% elif p.n_images %}
   <img src="{{ url_for('media', pid=p.id, n=0) }}" alt="Primera slide de «{{ p.title }}»" loading="lazy">
   {% else %}
   <div class="noimg">Sin imagen</div>
